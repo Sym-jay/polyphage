@@ -1,0 +1,5 @@
+biopython>=1.81
+pymoo>=0.6.0
+numpy>=1.24
+matplotlib>=3.7
+torch>=2.0
