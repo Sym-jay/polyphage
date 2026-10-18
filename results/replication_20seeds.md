@@ -6,9 +6,9 @@
 **Objectives:** `mpnn_nll` (ProteinMPNN), `ddg` (ThermoMPNN), `neg_n_mutations`
 **Cost:** ~140 s per seed, ~46 min total on a T4
 
-> **Status: incomplete.** The decisive control — the ThermoMPNN ddG-prior null —
-> has not been run. See *What is still missing*. Do not cite the verdicts below
-> as final.
+> **Status: D186H survives all three nulls that have been run.** One stronger
+> null remains untested — see *The position half of the prior*. Treat the
+> result as solid but not yet maximally controlled.
 
 ## Search behaviour
 
@@ -53,6 +53,31 @@ already ranks it as more stabilising.
 | Dura:140D | 1/20 | 0.0239 | 1.0000 | no |
 | Dura:165A | 1/20 | 0.0256 | 1.0000 | no |
 
+### ThermoMPNN ddG-prior null — "or did the stability model?"
+
+The control that matters for a three-objective run, since ddG is what steered
+the search.
+
+| Mutation | Found | Chance | p (Holm) | Verdict | Enrichment vs uniform |
+|---|---|---|---|---|---|
+| **FAST:186H** | 2/20 | 0.0029 | **0.0080** | survives | 1.6× |
+| FAST:233K | 1/20 | 0.0042 | 0.2484 | no | 3.0× |
+| Dura:168R | 1/20 | 0.0036 | 0.2484 | no | 2.8× |
+| Dura:140D | 1/20 | 0.0032 | 0.2484 | no | 2.1× |
+| Dura:165A | 1/20 | 0.0048 | 0.2484 | no | 2.2× |
+
+### Summary
+
+| Null | Survives |
+|---|---|
+| Uniform | FAST:186H (p = 0.0030) |
+| ProteinMPNN prior | FAST:186H (p = 0.0318) |
+| ThermoMPNN ddG prior | FAST:186H (p = 0.0077) |
+| ddG prior, residue **and** position | not yet run |
+
+**D186H survives every null tested.** Recovered in seeds 6 and 11; seed 6 also
+produced N233K.
+
 ## Reading
 
 **D186H is the only mutation with any claim.** Recovered in 2 of 20 independent
@@ -68,25 +93,38 @@ T140D result was an artifact of unseeded RNG.
 once. At n = 20 a single appearance cannot clear a corrected threshold against
 any reasonable null, which is the point of running 20 seeds rather than one.
 
-## What is still missing
+## The position half of the prior
 
-**This was a three-objective run, so the honest control is ThermoMPNN's ddG
-prior, not ProteinMPNN's.** The ddG objective is what steered the search, and
-`ddg_prior_sampler` exists precisely for this comparison. It has not been run.
+The ddG null enriched D186H only **1.6×** over uniform, which is far less than
+expected for a substitution ThermoMPNN ranks at percentile 1 of 5035. That gap
+is informative, and it exposes a weakness in the control rather than a
+surprise about the data.
 
-The ThermoMPNN percentile column is why this matters. D186H sits at **percentile
-1** and N233K at **percentile 0** of 5035 scored substitutions — the two
-mutations recovered most are the two ThermoMPNN ranks highest. A ddG-weighted
-null may well reproduce them at a rate that removes the D186H result.
+`ddg_prior_sampler` normalises *within* a position: given that 186 is being
+mutated, how likely is histidine? A global percentile says nothing about that —
+if several substitutions at 186 score well, histidine is unremarkable among
+them. So the null was modelling only half of what a ddG-driven search is told.
+The other half is **which positions are worth touching at all**, and ThermoMPNN
+answers that too.
 
-Two outcomes are live, and both are reportable:
+`ddg_position_weights` supplies it, weighting each position by the best
+stabilising substitution available there. The strongest honest null uses both:
 
-1. D186H survives the ddG null → the search contributes signal beyond the
-   stability model's prior.
-2. D186H does not → the recoveries are ThermoMPNN's prior being ferried through
-   the search, which is a clean negative result about where the signal lives.
+```python
+rates = null_rate_per_run(
+    target, n_mutations=9, n_samples=20000,
+    aa_sampler=ddg_prior_sampler(target, oracle),
+    position_weights=ddg_position_weights(target, oracle),
+)
+print_replication(retest(result, rates))   # reuses the sweep, seconds not minutes
+```
 
-Until that cell runs, neither can be claimed.
+**This has not been run.** It is the last control standing between the current
+result and a claim that is maximally defended. If D186H survives it too, the
+search is contributing signal beyond ThermoMPNN's prior on both axes. If it does
+not, the honest conclusion is that the stability model located the position and
+the search delivered it — a clean negative result that is worth reporting, and
+which almost nobody checks.
 
 **Minor:** the null rates use `n_mutations=9` while the front spans 4–10
 mutations. Chance rises with mutation count, so this overstates the chance rate
