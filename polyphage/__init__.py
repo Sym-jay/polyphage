@@ -13,6 +13,7 @@ from .encoding import (
 )
 from .control import (
     compare_to_null,
+    ddg_prior_sampler,
     mpnn_prior_sampler,
     null_rate_per_run,
     repeat_seeds_summary,
@@ -48,7 +49,8 @@ __all__ = [
     "ObjectiveSpec", "foldability_objective", "novelty_objective", "run",
     "StabilityOracle", "stability_objective",
     "compare_to_null", "repeat_seeds_summary", "run_control",
-    "mpnn_prior_sampler", "null_rate_per_run", "uniform_aa_sampler",
+    "ddg_prior_sampler", "mpnn_prior_sampler", "null_rate_per_run",
+    "uniform_aa_sampler",
     "ReplicationResult", "front_diversity", "print_replication", "replicate",
     "wilson_interval",
     "DURA_PETASE", "FAST_PETASE", "KNOWN_HOTSPOTS", "exact_match_labels",
