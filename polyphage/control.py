@@ -31,6 +31,16 @@ the 14 known thermostabilising mutations in the top quartile, T140D among them
 at percentile 18 (``results/thermompnn_validation.md``). Reporting a
 three-objective run against the uniform null alone would credit the optimizer
 with what the stability model supplied.
+
+A prior null has **two** halves, and the samplers above only supply one. Given
+that a position is being mutated, which residue goes there -- that is the
+sampler. Which positions are worth mutating at all -- that is
+``ddg_position_weights``, and leaving it uniform understates the null badly.
+D186H sits at percentile 1 of 5035 scored substitutions, yet the
+within-position ddG null enriched it only 1.6x over uniform, because a global
+rank says nothing about how histidine compares to the other eighteen residues
+*at position 186*. Pass both for a null that matches what a ddG-driven search
+was actually told.
 """
 
 from __future__ import annotations
@@ -169,20 +179,59 @@ def ddg_prior_sampler(target, oracle, temperature: float = 1.0):
     return sample
 
 
+def ddg_position_weights(target, oracle, temperature: float = 1.0) -> np.ndarray:
+    """Weights that make the null pick the positions a ddG search would.
+
+    ``ddg_prior_sampler`` normalises *within* a position: given that position
+    186 is being mutated, how likely is histidine? That is only half of what a
+    ddG-driven search is told. The other half is *which positions are worth
+    touching at all*, and ThermoMPNN answers that too.
+
+    Leaving position choice uniform understates the null, and by a lot. D186H
+    sits at percentile 1 of all 5035 scored substitutions, yet the
+    within-position null enriched it only 1.6x over uniform -- because a global
+    rank says nothing about how histidine compares to the other eighteen
+    residues *at position 186*. Weighting positions by the best stabilising
+    substitution available at each one restores the missing half.
+
+    Weight is proportional to ``exp(-best_ddG_at_position / temperature)``,
+    where ``best`` is the most negative (most stabilising) substitution the
+    oracle scores there.
+    """
+    resnums = [target.resnum(i) for i in target.mutable_idx]
+    wt_aa = [target.wildtype_seq[i] for i in target.mutable_idx]
+
+    best = np.array([
+        min(
+            (oracle.table.get((rn, a), 0.0) for a in AA_ALPHABET if a != wt),
+            default=0.0,
+        )
+        for rn, wt in zip(resnums, wt_aa)
+    ], dtype=float)
+
+    logits = -best / temperature
+    w = np.exp(logits - logits.max())
+    total = w.sum()
+    return w / total if total > 0 else np.full(len(w), 1 / len(w))
+
+
 def sample_random_variants(
     target,
     n_mutations: int,
     n_samples: int,
     rng: np.random.Generator,
     aa_sampler=None,
+    position_weights: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray, list[list[str]]]:
     """Draw null variants.
 
     Returns (hotspot position hits, exact-match counts, exact-match labels per
-    sample). Positions are drawn without replacement over mutable positions;
-    the replacement residue comes from ``aa_sampler``, which defaults to the
-    uniform non-wildtype proposal. Pass ``mpnn_prior_sampler`` for the stricter
-    model-prior null.
+    sample). The replacement residue comes from ``aa_sampler``, defaulting to
+    the uniform non-wildtype proposal.
+
+    ``position_weights`` biases *which* positions get mutated, which matters
+    once the search is being steered by a model that ranks positions as well as
+    residues. Uniform when omitted. See ``ddg_position_weights``.
     """
     if aa_sampler is None:
         aa_sampler = uniform_aa_sampler(target)
@@ -196,7 +245,9 @@ def sample_random_variants(
 
     n_mutable = len(mutable_resnums)
     for s in range(n_samples):
-        picks = rng.choice(n_mutable, size=n_mutations, replace=False)
+        picks = rng.choice(
+            n_mutable, size=n_mutations, replace=False, p=position_weights
+        )
         pos_hits[s] = int(hotspot_mask[picks].sum())
 
         labels: list[str] = []
@@ -216,16 +267,18 @@ def null_rate_per_run(
     n_samples: int = 5000,
     seed: int = 0,
     aa_sampler=None,
+    position_weights: np.ndarray | None = None,
 ) -> dict[str, float]:
     """Per-mutation probability that one *chance* variant contains it.
 
-    Feeds ``replicate.replicate``, which turns these into exact binomial
-    p-values on an observed recovery rate across seeds. Measured rather than
-    derived, so it stays correct when the proposal is not uniform.
+    Feeds ``replicate.replicate`` and ``replicate.retest``, which turn these
+    into exact binomial p-values on an observed recovery rate across seeds.
+    Measured rather than derived, so it stays correct for any proposal.
     """
     rng = np.random.default_rng(seed)
     _, _, labels = sample_random_variants(
-        target, n_mutations, n_samples, rng, aa_sampler=aa_sampler
+        target, n_mutations, n_samples, rng,
+        aa_sampler=aa_sampler, position_weights=position_weights,
     )
     counts: dict[str, int] = {}
     for sample_labels in labels:

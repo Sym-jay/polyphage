@@ -510,11 +510,18 @@ Running it on a two-objective front would be wrong in the other direction:
 penalising the search for a prior it never had access to.
 """),
     code("""
-from polyphage import ddg_prior_sampler
+from polyphage import ddg_position_weights, ddg_prior_sampler
 
+# A prior null has two halves. The sampler answers "given this position, which
+# residue?"; the weights answer "which positions at all?". A ddG-driven search
+# is told both, so a null that models only the first is too weak -- on 6EQE it
+# enriched D186H just 1.6x despite ThermoMPNN ranking it at percentile 1.
 ddg_null = ddg_prior_sampler(target, oracle)
+ddg_pos = ddg_position_weights(target, oracle)
+
 control_ddg = run_control(
-    target, reports, n_samples=5000, aa_sampler=ddg_null, label="ThermoMPNN-ddG-prior"
+    target, reports, n_samples=5000, aa_sampler=ddg_null,
+    label="ThermoMPNN-ddG-prior (residue only)"
 )
 """),
     md("""
@@ -556,13 +563,36 @@ supplied by ProteinMPNN's prior, not discovered by the search — and saying so
 plainly is far stronger than being asked about it in review.
 """),
     code("""
-strict_rates = null_rate_per_run(
-    target, n_mutations=9, n_samples=20000, aa_sampler=strict
-)
-for rec in result.recoveries:
-    u = null_rates.get(rec.mutation, 0.0)
-    s = strict_rates.get(rec.mutation, 0.0)
-    print(f"  {rec.mutation:<14} chance(uniform)={u:.4f}  chance(prior)={s:.4f}")
+from polyphage import print_replication, retest
+
+# Score the SAME sweep against every null. retest() reuses the runs already in
+# hand, so this costs seconds rather than another 45 minutes of search.
+nulls = {
+    "uniform": dict(),
+    "ProteinMPNN-prior": dict(aa_sampler=strict),
+    "ddG-prior (residue)": dict(aa_sampler=ddg_null),
+    "ddG-prior (residue+position)": dict(aa_sampler=ddg_null, position_weights=ddg_pos),
+}
+
+for label, kw in nulls.items():
+    rates = null_rate_per_run(target, n_mutations=9, n_samples=20000, **kw)
+    scored = retest(result, rates)
+    survivors = [r.mutation for r in scored.recoveries
+                 if r.p_adjusted is not None and r.p_adjusted < 0.05]
+    print(f"{label:<30} survives: {', '.join(survivors) or 'nothing'}")
+"""),
+    md("""
+The last row is the one to report. A mutation that survives **residue+position**
+was located by the search; one that survives only the weaker nulls was handed
+over by ThermoMPNN's prior, and saying so is far stronger than being asked about
+it in review.
+"""),
+    code("""
+# Keep the sweep. Colab wipes its filesystem, and this cost ~45 minutes.
+from polyphage import save_replication
+
+save_replication(result, "replication.json")
+from google.colab import files; files.download("replication.json")
 """),
     md("""
 ---
