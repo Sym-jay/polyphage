@@ -1,11 +1,17 @@
 """Randomization control: is the hotspot overlap better than chance?
 
 Run 2 recovered T140D, an exact DuraPETase mutation. That is only evidence if
-random mutations of the same size do not recover it nearly as often. With 15
-known hotspot positions among ~262 mutable ones, a 9-mutation variant lands on
-*some* hotspot position maybe 40% of the time by luck, so the position-level
-overlap is weak evidence on its own. Matching the exact amino acid is much
-rarer. This module measures both against an explicit null instead of guessing.
+random mutations of the same size do not recover it nearly as often. There are
+**14** known hotspot positions among ~262 mutable ones -- FAST-PETase's 5 and
+DuraPETase's 10, which share position 280 -- so a 9-mutation variant lands on
+*some* hotspot position about 39% of the time by luck. Position-level overlap
+is therefore close to worthless as evidence.
+
+Matching the exact amino acid is far rarer: 14 target (position, residue) pairs
+out of 262 x 19 possibilities puts a single mutation at ~0.28%, and a
+9-mutation variant at roughly 2.5% of scoring any exact hit. That is the number
+worth reporting. This module measures both against an explicit null rather than
+relying on the estimate above.
 
 The null used here is uniform random mutation: same number of mutations, random
 positions, random replacement amino acids. That is the honest baseline for the

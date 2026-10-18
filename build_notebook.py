@@ -186,6 +186,30 @@ print(summarize(reports))
 log_run(config, reports, wall)
 """),
     md("""
+### Cell 7b — Reproducibility (GATE)
+
+The same seed and config must give the same front. This was broken until the
+`fix/reproducibility-and-thermompnn` branch: the operators read a `seed` key
+pymoo never passes, fell back to OS entropy, and every run differed while still
+logging `"seed": 1`. Any result produced before that fix cannot be regenerated.
+
+Cheap to check, so check it rather than assuming — and note that a stale
+`polyphage` module cached by Colab is the usual reason this fails after an edit
+(Runtime > Restart session).
+"""),
+    code("""
+a = run(target, objectives, pop_size=12, n_gen=5, max_mutations=15,
+        seed=7, verbose=False)
+b = run(target, objectives, pop_size=12, n_gen=5, max_mutations=15,
+        seed=7, verbose=False)
+
+import numpy as np
+fa, fb = np.atleast_2d(a.F), np.atleast_2d(b.F)
+assert fa.shape == fb.shape, f"same seed gave {fa.shape[0]} vs {fb.shape[0]} variants"
+np.testing.assert_allclose(np.sort(fa, axis=0), np.sort(fb, axis=0))
+print(f"reproducible: two seed=7 runs both gave {fa.shape[0]} identical variants")
+"""),
+    md("""
 ## Cell 8 — Plot the front
 
 A front that is one point, or a dead-straight line, means the two objectives are
@@ -237,9 +261,10 @@ files.download('pareto_front.png')
 
 Two questions the run above cannot answer:
 
-1. **Was T140D luck?** 15 known hotspot positions among 262 mutable ones means a
-   9-mutation variant hits *some* hotspot about 40% of the time by chance.
-   Cell 11 measures this against an explicit null instead of guessing.
+1. **Was T140D luck?** 14 known hotspot positions among 262 mutable ones means a
+   9-mutation variant hits *some* hotspot about 39% of the time by chance, so
+   position-level overlap proves almost nothing. An *exact* position-and-residue
+   match runs at about 2.5%. Cell 11 measures both against an explicit null.
 2. **Does any of this survive heat?** The ProteinMPNN score says "this sequence
    fits this backbone". It says nothing about temperature. Cells 12-15 add a
    real stability objective.
@@ -275,18 +300,25 @@ it shares the backbone already loaded here.
 print("cloned")
 """),
     md("""
-## Cell 13 — Discover the interface (do not skip)
+## Cell 13 — Confirm the interface (do not skip)
 
-The ThermoMPNN README does not document `custom_inference.py`'s flags, and this
-project has already lost time to a confidently-guessed identifier that did not
-exist. Print the real help text and read it before running anything.
+The ThermoMPNN README does not document `custom_inference.py`, and this project
+has already lost time to confidently-guessed identifiers that did not exist.
+Two things trip this up, both already handled in `StabilityOracle.build`:
 
-If the flags differ from `--pdb` / `--chain` / `--out`, pass the right ones
-through `extra_args` in the next cell, or tell me and I will patch
-`StabilityOracle.build`.
+* The script is in `analysis/`, not at the repo root.
+* ThermoMPNN ships its own `datasets.py` defining `Mutation`, which collides
+  with the installed HuggingFace `datasets` package. `PYTHONPATH` must carry the
+  repo root or the import fails.
+
+Expected flags: `--pdb --chain --model_path --out_dir`. If this checkout differs,
+pass the extras through `extra_args` in Cell 14.
 """),
     code("""
-!python /content/ThermoMPNN/custom_inference.py -h
+!find /content/ThermoMPNN -name "custom_inference.py"
+!ls /content/ThermoMPNN/models
+!PYTHONPATH=/content/ThermoMPNN python \\
+    /content/ThermoMPNN/analysis/custom_inference.py -h
 """),
     md("""
 ## Cell 14 — Build the ddG table (once)
@@ -328,6 +360,25 @@ for rn, aa, ddg in top:
     if DURA_PETASE.get(rn) == aa: tags.append("DuraPETase")
     if tags:
         print(f"  {rn}{aa}  ddG={ddg:+.3f}   <-- {', '.join(tags)}")
+"""),
+    md("""
+### Cell 14c — Sign convention (GATE)
+
+Nothing downstream would notice if ThermoMPNN's ddG sign were inverted: the
+optimiser would quietly minimise toward the *least* stable variants it can find
+and still report a tidy Pareto front.
+
+This checks the sign against ground truth. FAST-PETase and DuraPETase mutations
+were selected experimentally for thermostability, so under the documented
+convention (negative = stabilising) they should sit below the median of all
+scored mutations. **If this prints `FLIPPED?`, stop** and negate ddG in
+`_parse` before running Cell 15.
+"""),
+    code("""
+sign = oracle.check_sign_convention()
+assert sign["verdict"] != "FLIPPED?", (
+    "ThermoMPNN ddG sign looks inverted -- fix _parse before optimising"
+)
 """),
     md("""
 ## Cell 15 — Three-objective run
