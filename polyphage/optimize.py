@@ -13,6 +13,10 @@ Design notes worth defending in the report:
 * A hard constraint caps Hamming distance from wildtype, so candidates stay in
   the experimentally testable regime (real variants: 5-10 mutations) no matter
   how long the run goes.
+* **Operators draw from the generator pymoo hands them**, not from a fresh
+  unseeded one. ``run(seed=...)`` therefore reproduces a run exactly, which any
+  reported result depends on. See ``_rng`` for what went wrong before, and
+  ``tests/test_reproducibility.py`` for the check that keeps it fixed.
 """
 
 from __future__ import annotations
@@ -32,19 +36,42 @@ from .encoding import decode, hamming, wildtype_vector
 N_AA = 20
 
 
+def _rng(kwargs, fallback: np.random.Generator) -> np.random.Generator:
+    """The RNG pymoo intends this operator call to use.
+
+    pymoo >= 0.6.2 passes operators a seeded ``numpy.random.Generator`` under the
+    key ``random_state``. It has never passed one under ``seed`` -- reading that
+    key yields ``None``, ``default_rng(None)`` then draws from OS entropy, and the
+    run becomes irreproducible no matter what ``minimize(seed=...)`` was given.
+    That was this module's behaviour until the reproducibility fix; see
+    ``tests/test_reproducibility.py``, which fails if it regresses.
+
+    ``fallback`` covers older pymoo, which passes no generator at all. It is a
+    per-instance generator seeded from the run's seed, so operators built fresh by
+    each ``run()`` call replay the same stream rather than an unseeded one.
+    """
+    rs = kwargs.get("random_state")
+    if isinstance(rs, np.random.Generator):
+        return rs
+    if isinstance(rs, np.random.RandomState):
+        return np.random.default_rng(rs.randint(0, 2**31 - 1))
+    return fallback
+
+
 class WildtypeBiasedSampling(Sampling):
     """Seed the population at wildtype, then perturb a handful of positions."""
 
-    def __init__(self, target, min_mut: int = 1, max_mut: int = 8):
+    def __init__(self, target, min_mut: int = 1, max_mut: int = 8, seed: int = 0):
         super().__init__()
         self.target = target
         self.min_mut = min_mut
         self.max_mut = max_mut
+        self._fallback = np.random.default_rng(seed)
 
     def _do(self, problem, n_samples, **kwargs):
         wt = wildtype_vector(self.target)
         X = np.tile(wt, (n_samples, 1))
-        rng = np.random.default_rng(kwargs.get("seed"))
+        rng = _rng(kwargs, self._fallback)
         for row in X:
             k = rng.integers(self.min_mut, self.max_mut + 1)
             where = rng.choice(len(row), size=k, replace=False)
@@ -60,16 +87,19 @@ class RandomResetMutation(Mutation):
     uniformly over the 20 amino acids.
     """
 
-    def __init__(self, target, prob: float = 0.01, revert_prob: float = 0.5):
+    def __init__(
+        self, target, prob: float = 0.01, revert_prob: float = 0.5, seed: int = 0
+    ):
         super().__init__()
         self.target = target
         self.gene_prob = prob
         self.revert_prob = revert_prob
+        self._fallback = np.random.default_rng(seed)
 
     def _do(self, problem, X, **kwargs):
         X = X.astype(int).copy()
         wt = wildtype_vector(self.target)
-        rng = np.random.default_rng(kwargs.get("seed"))
+        rng = _rng(kwargs, self._fallback)
 
         touched = rng.random(X.shape) < self.gene_prob
         revert = touched & (rng.random(X.shape) < self.revert_prob)
@@ -146,6 +176,10 @@ def run(
 
     ``mutation_prob`` defaults to roughly two touched genes per individual per
     generation, which keeps the search local on a ~265-residue protein.
+
+    ``seed`` fully determines the run: the same seed and config give the same
+    front, and different seeds give independent replicates. Both properties are
+    required to report a recovery rate, so do not treat seeds as cosmetic.
     """
     if mutation_prob is None:
         mutation_prob = 2.0 / target.n_mutable
@@ -153,9 +187,11 @@ def run(
     problem = PETaseProblem(target, objectives, max_mutations=max_mutations)
     algorithm = NSGA2(
         pop_size=pop_size,
-        sampling=WildtypeBiasedSampling(target, max_mut=min(8, max_mutations)),
+        sampling=WildtypeBiasedSampling(
+            target, max_mut=min(8, max_mutations), seed=seed
+        ),
         crossover=UniformCrossover(prob=0.9),
-        mutation=RandomResetMutation(target, prob=mutation_prob),
+        mutation=RandomResetMutation(target, prob=mutation_prob, seed=seed),
         eliminate_duplicates=True,
     )
     return minimize(
