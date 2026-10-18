@@ -244,6 +244,90 @@ def test_progress_can_be_silenced(capsys):
     assert capsys.readouterr().out == ""
 
 
+def _sample_result():
+    from polyphage.replicate import MutationRecovery, ReplicationResult
+
+    return ReplicationResult(
+        seeds=list(range(1, 21)),
+        front_sizes=[12] * 20, front_diversity=[7.1] * 20,
+        recoveries=[
+            MutationRecovery("FAST:186H", 2, 20),
+            MutationRecovery("Dura:140D", 1, 20),
+        ],
+        seeds_with_any_exact=5,
+        per_seed_matches={s: (["FAST:186H"] if s < 3 else []) for s in range(1, 21)},
+    )
+
+
+def test_retest_changes_the_verdict_when_the_null_changes():
+    """The real case: 2/20 beats chance but not a prior that already favours it."""
+    from polyphage.replicate import retest
+
+    res = _sample_result()
+    loose = retest(res, {"FAST:186H": 0.0018, "Dura:140D": 0.0015})
+    strict = retest(res, {"FAST:186H": 0.0600, "Dura:140D": 0.0600})
+
+    p_loose = next(r.p_adjusted for r in loose.recoveries if r.mutation == "FAST:186H")
+    p_strict = next(r.p_adjusted for r in strict.recoveries if r.mutation == "FAST:186H")
+    assert p_loose < 0.05 < p_strict
+
+
+def test_retest_does_not_mutate_the_original():
+    """Scoring against a second null must not silently rewrite the first."""
+    from polyphage.replicate import retest
+
+    res = retest(_sample_result(), {"FAST:186H": 0.0018, "Dura:140D": 0.0015})
+    before = [r.p_adjusted for r in res.recoveries]
+    retest(res, {"FAST:186H": 0.9, "Dura:140D": 0.9})
+    assert [r.p_adjusted for r in res.recoveries] == before
+
+
+def test_retest_leaves_counts_and_diversity_alone():
+    from polyphage.replicate import retest
+
+    res = _sample_result()
+    out = retest(res, {"FAST:186H": 0.01})
+    assert out.seeds == res.seeds
+    assert out.front_sizes == res.front_sizes
+    assert out.front_diversity == res.front_diversity
+    assert out.seeds_with_any_exact == res.seeds_with_any_exact
+    assert [(r.mutation, r.n_found) for r in out.recoveries] == \
+           [(r.mutation, r.n_found) for r in res.recoveries]
+
+
+def test_a_mutation_absent_from_the_null_gets_no_pvalue():
+    from polyphage.replicate import retest
+
+    out = retest(_sample_result(), {"FAST:186H": 0.01})
+    missing = next(r for r in out.recoveries if r.mutation == "Dura:140D")
+    assert missing.p_value is None and missing.p_adjusted is None
+
+
+def test_save_and_load_round_trip(tmp_path):
+    """A 45-minute sweep must survive a dead Colab runtime."""
+    from polyphage.replicate import load_replication, save_replication
+
+    res = _sample_result()
+    back = load_replication(save_replication(res, tmp_path / "rep.json"))
+
+    assert back.seeds == res.seeds
+    assert back.front_sizes == res.front_sizes
+    assert back.front_diversity == res.front_diversity
+    assert back.seeds_with_any_exact == res.seeds_with_any_exact
+    assert back.per_seed_matches == res.per_seed_matches
+    # recovery counts are rebuilt from per-seed matches, not stored twice
+    assert {(r.mutation, r.n_found) for r in back.recoveries} == {("FAST:186H", 2)}
+
+
+def test_loaded_result_can_be_retested(tmp_path):
+    """The whole point of saving: score it against a null discovered later."""
+    from polyphage.replicate import load_replication, retest, save_replication
+
+    back = load_replication(save_replication(_sample_result(), tmp_path / "r.json"))
+    scored = retest(back, {"FAST:186H": 0.0018})
+    assert next(r.p_adjusted for r in scored.recoveries) < 0.05
+
+
 def test_print_replication_handles_an_empty_recovery_table(capsys):
     """No recoveries is a reportable result, not a crash."""
     from polyphage.replicate import ReplicationResult, print_replication
