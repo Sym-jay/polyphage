@@ -66,7 +66,9 @@ Full run log: [`results/runs.jsonl`](results/runs.jsonl).
 | Residue mapping + triad gate | Working, gated, tested |
 | ProteinMPNN batch scorer | Working, checked against the reference path |
 | NSGA-II search | Working; **reproducible as of this branch** |
-| Randomization control | Implemented, **never run** |
+| Randomization control (uniform) | Implemented, **never run** |
+| Randomization control (model prior) | Implemented, **never run** |
+| Replication across seeds | Implemented, **never run** |
 | ThermoMPNN ddG | Fixed on this branch, **not yet re-run end to end** |
 | Activity / docking screen | Not started |
 | Wet-lab validation | Not started |
@@ -98,9 +100,10 @@ polyphage/
   scoring.py     ProteinMPNN foldability; batched + subprocess reference
   optimize.py    NSGA-II problem, categorical operators, objective specs
   validate.py    hotspot overlap, front reporting, run log, plotting
-  control.py     randomization control against an explicit null
+  control.py     randomization controls: uniform and ProteinMPNN-prior nulls
+  replicate.py   recovery rate across seeds, with CIs and Holm correction
   stability.py   ThermoMPNN ddG via a cached site-saturation table
-tests/             reproducibility and ddG-mapping regression tests (no GPU needed)
+tests/             regression tests, 33 of them, none needing a GPU
 build_notebook.py  generates Polyphage.ipynb
 results/           run log and figures
 ```
@@ -180,6 +183,42 @@ minimize toward the *least* stable variants. `StabilityOracle.check_sign_convent
 tests the sign against the known heat-stable mutations and should be run before
 any three-objective search.
 
+## What a reportable claim looks like
+
+A single run recovering T140D is an anecdote. The reportable form is:
+
+> The method recovers T140D in k of n independent runs (95% CI [lo, hi]),
+> against a chance rate of p per run.
+
+`replicate.py` produces exactly that table. Three things make it defensible:
+
+**Confidence intervals, Wilson not normal.** With 20–50 seeds and counts often
+at 0 or n, the normal approximation produces intervals outside [0, 1]. Wilson
+does not.
+
+**Correction for multiple testing.** There are 14 known mutations to recover.
+Testing each and reporting the smallest p-value is cheating; `holm_adjust`
+controls the family-wise error rate without assuming the tests are independent,
+which they are not — mutations co-occur within a variant.
+
+**Two nulls, not one.**
+
+| Null | Question it answers |
+|---|---|
+| Uniform random mutation | Did the search beat chance? |
+| ProteinMPNN's own prior | Did the *optimizer* find it, or did the model's prior already favour it? |
+
+The second is the one a reviewer reaches for. It samples replacement residues
+from the model's conditional distribution at each position while keeping
+position choice uniform, so a mutation that survives it was located by the
+search rather than handed over by the prior. A mutation significant under the
+uniform null but not the strict one should be reported as such.
+
+`replicate.py` also reports **front diversity** — mean pairwise Hamming distance
+within a Pareto front. This project's run 2 returned two variants sharing seven
+of nine mutations: one converged lineage presented as two findings. The metric
+makes that visible instead of leaving it to be noticed by eye.
+
 ## Limitations
 
 Stated plainly, because they bound what this project can claim:
@@ -210,13 +249,11 @@ Stated plainly, because they bound what this project can claim:
 2. Randomization control on the T140D finding — gates whether it can be claimed.
 3. Replication: 20–50 independent seeds at the run-2 configuration, reporting
    recovery rate per known mutation with confidence intervals, rather than one
-   anecdote. `repeat_seeds_summary` aggregates this.
-4. Three-objective runs: foldability + ddG + mutation count, after
+   anecdote. `replicate.replicate` produces the table; budget ~2.5 min per seed
+   on a T4.
+4. Both nulls on the replicated result — uniform and ProteinMPNN-prior.
+5. Three-objective runs: foldability + ddG + mutation count, after
    `check_sign_convention()` passes.
-5. A stricter null — random variants drawn from ProteinMPNN's own
-   high-likelihood region. This separates "the optimizer found it" from "the
-   model's prior already favoured it", which is the first question a reviewer
-   will ask.
 6. Activity screen on top candidates: ESMFold → triad geometry check → PET
    oligomer docking (AutoDock Vina / GNINA), measuring Ser160 OG to ester
    carbonyl distance. This is the part that speaks to actual plastic degradation.

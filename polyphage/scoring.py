@@ -223,6 +223,43 @@ class BatchScorer:
 
         return (total / n_orders).astype(float)
 
+    def position_log_probs(
+        self, seq: str, n_orders: int | None = None, seed: int | None = None
+    ) -> np.ndarray:
+        """(L, 21) log-probabilities per position, for the model's own prior.
+
+        Used by the stricter null in ``control.py``: to ask whether ProteinMPNN
+        already favours a literature mutation at a position, you need the
+        model's distribution over residues there, not the single scalar that
+        ``score`` returns.
+
+        Averaged across decoding orders in *probability* space, not log space.
+        Each order gives a different conditional distribution, and the right
+        summary of several distributions is their mixture -- averaging logs
+        would compute a geometric mean, which understates residues that one
+        decoding order likes and another does not.
+        """
+        torch = self.torch
+        n_orders = self.n_decoding_orders if n_orders is None else n_orders
+        base_seed = self.seed if seed is None else seed
+
+        S = self._encode([seq])
+        total = None
+        with torch.no_grad():
+            for k in range(n_orders):
+                torch.manual_seed(base_seed + k)
+                randn = torch.randn(self._chain_M.shape, device=self.device)
+                log_probs = self.model(
+                    self._X, S, self._mask,
+                    self._chain_M * self._chain_M_pos,
+                    self._residue_idx, self._chain_encoding_all, randn,
+                )
+                probs = log_probs.exp()[0]  # (L, 21)
+                total = probs if total is None else total + probs
+
+        mean_probs = (total / n_orders).cpu().numpy()
+        return np.log(np.clip(mean_probs, 1e-12, None))
+
 
 def check_equivalence(
     batch: BatchScorer,
