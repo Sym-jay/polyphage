@@ -402,9 +402,18 @@ for rn, aa, ddg in oracle.best_stabilising(15):
     md("""
 Worth a look before optimising: do any of those top single mutations coincide
 with the FAST-PETase set (S121E, D186H, R224Q, N233K, R280A) or the DuraPETase
-set (117, 119, 140, 159, 165, 168, 180, 188, 214, 280)? If ThermoMPNN already
-ranks known-good mutations highly, say so in the report -- it means the search
-starts from a well-informed prior.
+set (117, 119, 140, 159, 165, 168, 180, 188, 214, 280)?
+
+**They do, strongly.** On 6EQE, ThermoMPNN places 12 of the 14 known mutations
+in the top quartile of 5035 scored substitutions (mean percentile 16.6 against a
+null of 50; binomial p < 0.001 on the below-median count). N233K ranks at
+percentile 0. Full numbers in `results/thermompnn_validation.md`.
+
+That cuts both ways. It validates ThermoMPNN as an objective — the model is not
+noise, it independently rediscovers what two experimental groups found. But it
+also means **T140D sits at percentile 18 in ThermoMPNN's own ranking**, so a
+three-objective run that recovers T140D has shown little on its own. Cell 16c
+is the control that accounts for this.
 """),
     code("""
 from polyphage import FAST_PETASE, DURA_PETASE
@@ -499,6 +508,26 @@ search, not handed to it.
 strict = mpnn_prior_sampler(target, batch)
 control_strict = run_control(
     target, reports, n_samples=5000, aa_sampler=strict, label="ProteinMPNN-prior"
+)
+"""),
+    md("""
+### Cell 16c — The ddG null (only for three-objective runs)
+
+Which null is honest depends on what the search was told. The ProteinMPNN-prior
+null above is correct for a run whose only model is ProteinMPNN. Once ddG is an
+objective, the search is being steered by ThermoMPNN, and **ThermoMPNN's prior
+is what needs controlling for** — it already ranks T140D at percentile 18.
+
+Run this instead of Cell 16b when `reports` came from the three-objective run.
+Running it on a two-objective front would be wrong in the other direction:
+penalising the search for a prior it never had access to.
+"""),
+    code("""
+from polyphage import ddg_prior_sampler
+
+ddg_null = ddg_prior_sampler(target, oracle)
+control_ddg = run_control(
+    target, reports, n_samples=5000, aa_sampler=ddg_null, label="ThermoMPNN-ddG-prior"
 )
 """),
     md("""

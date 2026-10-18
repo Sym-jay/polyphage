@@ -67,9 +67,11 @@ Full run log: [`results/runs.jsonl`](results/runs.jsonl).
 | ProteinMPNN batch scorer | Working, checked against the reference path |
 | NSGA-II search | Working; **reproducible as of this branch** |
 | Randomization control (uniform) | Implemented, **never run** |
-| Randomization control (model prior) | Implemented, **never run** |
+| Randomization control (ProteinMPNN prior) | Implemented, **never run** |
+| Randomization control (ThermoMPNN ddG prior) | Implemented, **never run** |
 | Replication across seeds | Implemented, **never run** |
-| ThermoMPNN ddG | Fixed on this branch, **not yet re-run end to end** |
+| ThermoMPNN ddG | **Working, verified end to end** (100% coverage, sign confirmed) |
+| ThermoMPNN zero-shot validation | **Done** — see [`results/thermompnn_validation.md`](results/thermompnn_validation.md) |
 | Activity / docking screen | Not started |
 | Wet-lab validation | Not started |
 
@@ -215,18 +217,25 @@ Testing each and reporting the smallest p-value is cheating; `holm_adjust`
 controls the family-wise error rate without assuming the tests are independent,
 which they are not — mutations co-occur within a variant.
 
-**Two nulls, not one.**
+**Three nulls, and which one is honest depends on what the search was told.**
 
-| Null | Question it answers |
-|---|---|
-| Uniform random mutation | Did the search beat chance? |
-| ProteinMPNN's own prior | Did the *optimizer* find it, or did the model's prior already favour it? |
+| Null | Question it answers | Use when |
+|---|---|---|
+| Uniform random mutation | Did the search beat chance? | Always, as the floor |
+| ProteinMPNN's prior | Did the optimizer find it, or did ProteinMPNN already favour it? | Two-objective runs |
+| ThermoMPNN's ddG prior | …or did ThermoMPNN already favour it? | Three-objective runs |
 
-The second is the one a reviewer reaches for. It samples replacement residues
-from the model's conditional distribution at each position while keeping
-position choice uniform, so a mutation that survives it was located by the
-search rather than handed over by the prior. A mutation significant under the
-uniform null but not the strict one should be reported as such.
+The prior nulls keep position choice uniform — the optimizer isn't told which
+positions to change either — but draw the replacement residue from the model's
+own distribution. A mutation that survives one was located by the search rather
+than handed over.
+
+The third is not a formality. ThermoMPNN's zero-shot scan already ranks 12 of
+the 14 known mutations in the top quartile, **T140D among them at percentile
+18**. Reporting a three-objective result against the uniform null alone would
+credit the optimizer with what the stability model supplied. Equally, running
+the ddG null against a *two*-objective front is wrong in the other direction —
+penalising the search for a prior it never had.
 
 `replicate.py` also reports **front diversity** — mean pairwise Hamming distance
 within a Pareto front. This project's run 2 returned two variants sharing seven

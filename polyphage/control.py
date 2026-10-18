@@ -13,12 +13,24 @@ out of 262 x 19 possibilities puts a single mutation at ~0.28%, and a
 worth reporting. This module measures both against an explicit null rather than
 relying on the estimate above.
 
-The null used here is uniform random mutation: same number of mutations, random
-positions, random replacement amino acids. That is the honest baseline for the
-claim "the search found these, not chance". A stricter null -- random variants
-resampled from ProteinMPNN's own high-likelihood region -- would test the
-stronger claim "the *optimizer* found these, not just the model's prior", and
-is worth adding once this one is reported.
+Three nulls live here, and which one is honest depends on what the search was
+told:
+
+* ``uniform_aa_sampler`` -- same mutation count, random positions, random
+  replacement residues. Answers "did the search beat chance".
+* ``mpnn_prior_sampler`` -- replacement residues drawn from ProteinMPNN's own
+  conditional distribution. Answers "did the optimizer find this, or does
+  ProteinMPNN's prior already favour it". The right null for the two-objective
+  run, whose only model is ProteinMPNN.
+* ``ddg_prior_sampler`` -- replacement residues weighted by ThermoMPNN's
+  predicted ddG. The right null once ddG is an objective, because then the
+  search is steered by ThermoMPNN and that prior is what needs controlling for.
+
+The third is not a formality. ThermoMPNN's zero-shot scan already ranks 12 of
+the 14 known thermostabilising mutations in the top quartile, T140D among them
+at percentile 18 (``results/thermompnn_validation.md``). Reporting a
+three-objective run against the uniform null alone would credit the optimizer
+with what the stability model supplied.
 """
 
 from __future__ import annotations
@@ -103,6 +115,52 @@ def mpnn_prior_sampler(target, scorer, temperature: float = 1.0):
         total = probs.sum()
         probs = probs / total if total > 0 else np.full(len(keep), 1 / len(keep))
         tables.append(([AA_ALPHABET[j] for j in keep], probs))
+
+    def sample(p: int, rng: np.random.Generator) -> str:
+        choices, probs = tables[p]
+        return choices[rng.choice(len(choices), p=probs)]
+
+    return sample
+
+
+def ddg_prior_sampler(target, oracle, temperature: float = 1.0):
+    """The null matched to a *ddG-driven* search.
+
+    ``mpnn_prior_sampler`` controls for ProteinMPNN's prior, which is the right
+    null for a search whose only model is ProteinMPNN -- the two-objective run
+    that first recovered T140D. It is the wrong null once ddG joins the
+    objectives, because then the search is being steered by ThermoMPNN, and
+    ThermoMPNN's prior is what needs controlling for.
+
+    That distinction is not hypothetical here. On 6EQE, ThermoMPNN's zero-shot
+    site-saturation scan already places 12 of the 14 known thermostabilising
+    mutations in the top quartile of 5035 scored substitutions (mean percentile
+    16.6 against a null of 50, binomial p < 0.001 on the below-median count).
+    T140D sits at percentile 18. A three-objective search that "finds" T140D has
+    therefore demonstrated very little on its own: the ddG objective was already
+    pointing at it. See ``results/thermompnn_validation.md``.
+
+    Replacement residues are drawn with probability proportional to
+    ``exp(-ddG / temperature)``, so stabilising substitutions are favoured in the
+    same direction the optimiser favours them. A mutation the search recovers
+    significantly more often than *this* null was located by the search rather
+    than handed over by ThermoMPNN.
+    """
+    wt_aa = [target.wildtype_seq[i] for i in target.mutable_idx]
+    resnums = [target.resnum(i) for i in target.mutable_idx]
+
+    tables: list[tuple[list[str], np.ndarray]] = []
+    for p, resnum in enumerate(resnums):
+        choices = [a for a in AA_ALPHABET if a != wt_aa[p]]
+        ddgs = np.array(
+            [oracle.table.get((resnum, a), 0.0) for a in choices], dtype=float
+        )
+        # Negative ddG is stabilising, so negate before exponentiating.
+        logits = -ddgs / temperature
+        probs = np.exp(logits - logits.max())
+        total = probs.sum()
+        probs = probs / total if total > 0 else np.full(len(choices), 1 / len(choices))
+        tables.append((choices, probs))
 
     def sample(p: int, rng: np.random.Generator) -> str:
         choices, probs = tables[p]
