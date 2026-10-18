@@ -37,6 +37,31 @@ The older `runs.jsonl` entries have been replaced rather than kept alongside,
 because an unreproducible run log is worse than none — it invites exactly the
 claim that was just withdrawn.
 
+### D186H: the first recovery with a claim behind it
+
+A 20-seed replication of the three-objective search
+([`results/replication_20seeds.md`](results/replication_20seeds.md)):
+
+| Mutation | Found | p (uniform) | p (ProteinMPNN prior) | ThermoMPNN pct |
+|---|---|---|---|---|
+| **FAST:186H** | 2/20 | **0.0030** | **0.0318** | 1 |
+| FAST:233K | 1/20 | 0.1027 | 1.0000 | 0 |
+| Dura:168R | 1/20 | 0.1027 | 0.3303 | 19 |
+| Dura:140D | 1/20 | 0.1027 | 1.0000 | 18 |
+| Dura:165A | 1/20 | 0.1027 | 1.0000 | 39 |
+
+5 of 20 seeds recovered some exact literature mutation (25%, 95% CI [11%, 47%])
+against a 2.5% chance rate — p = 1.1 × 10⁻⁴ in aggregate. **D186H is the only
+individual mutation that survives correction**, and it survives both nulls.
+
+**This is not finished.** The run was three-objective, so the honest control is
+ThermoMPNN's ddG prior, not ProteinMPNN's — and ThermoMPNN ranks D186H at
+percentile 1 and N233K at percentile 0 of 5035 substitutions. The two mutations
+recovered most are the two the stability model already ranks highest, so a
+ddG-weighted null may remove the D186H result entirely. That cell has not been
+run. Until it has, neither "the search found it" nor "the prior supplied it" can
+be claimed.
+
 ### The third objective fixes the degenerate front
 
 The two-objective search was never a real trade-off, as this README has said
@@ -68,10 +93,10 @@ validation, which *is* a defensible result, is in
 | Residue mapping + triad gate | Working, gated, tested |
 | ProteinMPNN batch scorer | Working, checked against the reference path |
 | NSGA-II search | Working; **reproducible as of this branch** |
-| Randomization control (uniform) | Implemented, **never run** |
-| Randomization control (ProteinMPNN prior) | Implemented, **never run** |
-| Randomization control (ThermoMPNN ddG prior) | Implemented, **never run** |
-| Replication across seeds | Implemented, **never run** |
+| Randomization control (uniform) | **Run** on the 20-seed replication |
+| Randomization control (ProteinMPNN prior) | **Run** on the 20-seed replication |
+| Randomization control (ThermoMPNN ddG prior) | Implemented, **never run** — the decisive one |
+| Replication across seeds | **Done** — 20 seeds, see [`results/replication_20seeds.md`](results/replication_20seeds.md) |
 | ThermoMPNN ddG | **Working, verified end to end** (100% coverage, sign confirmed) |
 | ThermoMPNN zero-shot validation | **Done** — see [`results/thermompnn_validation.md`](results/thermompnn_validation.md) |
 | Activity / docking screen | Not started |
@@ -273,14 +298,15 @@ Stated plainly, because they bound what this project can claim:
    withdrew the T140D result. See *Results so far*.
 2. ~~Three-objective runs, after `check_sign_convention()` passes.~~ **Done** —
    the ddG objective is live and the front is no longer degenerate.
-3. **Replication: 20–50 independent seeds at the three-objective configuration.**
-   This is the open question and the project's headline number. There is nothing
-   to control for until it exists, because no reproducible run has yet produced
-   an exact literature match. `replicate.replicate` produces the table; budget
-   ~140 s per seed on a T4, so 20 seeds ≈ 45 min and 50 ≈ 2 h.
-4. Nulls on whatever the replication finds — uniform as the floor, and
-   `ddg_prior_sampler` for a three-objective result (not the ProteinMPNN one).
-5. Activity screen on top candidates: ESMFold → triad geometry check → PET
+3. ~~Replication across seeds.~~ **Done** at 20 seeds — D186H recovered 2/20,
+   significant against the uniform and ProteinMPNN-prior nulls.
+4. **The ddG-prior null on that replication.** The single most important
+   outstanding cell, and about a minute of compute: the run was three-objective,
+   so ThermoMPNN's prior is what needs controlling for, and it ranks D186H at
+   percentile 1. Use `retest` — the sweep is already in hand, so this does not
+   need re-running.
+5. Extend to 50 seeds if D186H survives, to tighten [11%, 47%].
+6. Activity screen on top candidates: ESMFold → triad geometry check → PET
    oligomer docking (AutoDock Vina / GNINA), measuring Ser160 OG to ester
    carbonyl distance. This is the part that speaks to actual plastic degradation.
 7. FastAPI + Docker serving layer, so other researchers can supply their own
