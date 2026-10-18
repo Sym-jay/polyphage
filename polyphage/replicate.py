@@ -149,6 +149,7 @@ def replicate(
     objectives,
     seeds,
     null_rate_per_run: dict[str, float] | None = None,
+    progress: bool = True,
     **run_kwargs,
 ) -> ReplicationResult:
     """Run the search once per seed and aggregate what it recovered.
@@ -162,19 +163,44 @@ def replicate(
     supplied, each mutation gets an exact binomial p-value and a Holm-adjusted
     one. Without it the recovery rates stand alone, which is still far more than
     a single run can support.
+
+    ``progress`` prints a line per seed with a running ETA. On by default,
+    because this is a long cell: a full-size run is ~140 s per seed on a T4, so
+    20 seeds is three quarters of an hour and 50 seeds is close to two. Printing
+    nothing for that long is indistinguishable from a hang, and the first
+    attempt at this was killed by hand at 30 minutes while working normally.
     """
+    import time
+
     from .optimize import run as run_search
 
     names = [o.name for o in objectives]
     seeds = list(seeds)
+    started = time.time()
+
+    if progress:
+        print(f"Replicating across {len(seeds)} seeds. Expect ~140 s each at "
+              f"pop_size=40, n_gen=25.", flush=True)
 
     sizes, diversity, per_seed = [], [], {}
-    for seed in seeds:
+    for i, seed in enumerate(seeds, 1):
+        t0 = time.time()
         res = run_search(target, objectives, seed=seed, verbose=False, **run_kwargs)
         reports = report_front(target, res, names)
         sizes.append(len(reports))
         diversity.append(front_diversity(target, reports))
         per_seed[seed] = sorted({m for r in reports for m in r.exact_matches})
+
+        if progress:
+            elapsed = time.time() - started
+            eta = elapsed / i * (len(seeds) - i)
+            hits = ", ".join(per_seed[seed]) or "-"
+            print(
+                f"  [{i:>3}/{len(seeds)}] seed={seed:<4} {time.time() - t0:5.0f}s  "
+                f"front={len(reports):<3} matches: {hits:<24} "
+                f"eta {eta / 60:4.0f}m",
+                flush=True,
+            )
 
     found_counts: dict[str, int] = {}
     for matches in per_seed.values():

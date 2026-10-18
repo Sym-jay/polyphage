@@ -221,6 +221,29 @@ def test_replicate_attaches_pvalues_when_given_null_rates():
             assert rec.p_adjusted >= rec.p_value
 
 
+def test_replicate_reports_progress_per_seed(capsys):
+    """A silent 45-minute cell is indistinguishable from a hang."""
+    from polyphage.replicate import replicate
+
+    target = _replication_target()
+    replicate(target, _fake_objectives(target), seeds=[1, 2, 3],
+              pop_size=8, n_gen=3, max_mutations=8)
+
+    out = capsys.readouterr().out
+    assert "[  1/3]" in out and "[  3/3]" in out
+    assert "eta" in out
+    assert out.count("seed=") == 3
+
+
+def test_progress_can_be_silenced(capsys):
+    from polyphage.replicate import replicate
+
+    target = _replication_target()
+    replicate(target, _fake_objectives(target), seeds=[1],
+              pop_size=8, n_gen=3, max_mutations=8, progress=False)
+    assert capsys.readouterr().out == ""
+
+
 def test_print_replication_handles_an_empty_recovery_table(capsys):
     """No recoveries is a reportable result, not a crash."""
     from polyphage.replicate import ReplicationResult, print_replication
