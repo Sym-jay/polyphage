@@ -24,8 +24,11 @@ from .optimize import ObjectiveSpec, foldability_objective, novelty_objective, r
 from .replicate import (
     ReplicationResult,
     front_diversity,
+    load_replication,
     print_replication,
     replicate,
+    retest,
+    save_replication,
     wilson_interval,
 )
 from .scoring import BatchScorer, SubprocessScorer, check_equivalence
@@ -52,7 +55,7 @@ __all__ = [
     "ddg_prior_sampler", "mpnn_prior_sampler", "null_rate_per_run",
     "uniform_aa_sampler",
     "ReplicationResult", "front_diversity", "print_replication", "replicate",
-    "wilson_interval",
+    "retest", "save_replication", "load_replication", "wilson_interval",
     "DURA_PETASE", "FAST_PETASE", "KNOWN_HOTSPOTS", "exact_match_labels",
     "log_run", "plot_front", "print_front", "report_front", "summarize",
 ]
