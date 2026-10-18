@@ -1,21 +1,47 @@
-"""Generate Polyphage.ipynb with the polyphage package embedded as %%writefile cells.
+"""Generate Polyphage.ipynb, which clones its own code from this repository.
 
 Run: python3 build_notebook.py
-Then upload the resulting Polyphage.ipynb to Colab (File > Upload notebook).
 
-Embedding the modules means the notebook is self-contained: no Drive mount, no
-GitHub clone, nothing to keep in sync by hand. Re-run this script after editing
-any module to regenerate the notebook.
+The notebook used to embed every module as a ``%%writefile`` cell, on the theory
+that this made it self-contained. It did the opposite. The notebook carried a
+*copy* of the code that drifted from the repository with nothing announcing the
+drift, and Colab's "save to GitHub" eventually pushed a stale copy over ``main``
+(commit c78ce43), silently reverting the modules for anyone who ran it while the
+repository's own ``.py`` files were perfectly correct. Several debugging rounds
+were spent on symptoms of that drift rather than on real bugs.
+
+So Cell 1 now clones ``polyphage`` from GitHub at a ref you choose. Consequences
+worth knowing:
+
+* The code that runs is whatever is pushed, so a change must be committed before
+  it can be tested. That is a constraint, and it is the right one for work whose
+  results have to be reproducible.
+* ``POLYPHAGE_REF`` in Cell 1 selects a branch, tag or commit, so testing a
+  feature branch means editing one string.
+* A Colab save-back can no longer poison the code. At worst it makes the
+  orchestration cells stale, which Cell 1's SHA comparison reports.
 """
 
 import json
+import subprocess
 from pathlib import Path
 
 HERE = Path(__file__).parent
-MODULES = [
-    "__init__.py", "encoding.py", "scoring.py", "optimize.py",
-    "validate.py", "control.py", "stability.py",
-]
+REPO = "https://github.com/Sym-jay/polyphage"
+
+
+def build_sha() -> str:
+    """The commit this notebook was generated from, stamped into Cell 1."""
+    try:
+        return subprocess.run(
+            ["git", "-C", str(HERE), "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip() or "unknown"
+    except Exception:
+        return "unknown"
+
+
+BUILD_SHA = build_sha()
 
 
 def md(text):
@@ -55,29 +81,59 @@ Reference structures: `6EQE` = wild-type IsPETase (the design target),
 `7SH6` = FAST-PETase (benchmark only). Earlier `6EQM`/`7VVE` were wrong;
 `7VVE` is not FAST-PETase.
 """),
-    md("## Cell 1 — Environment"),
-    code("""
-!git clone https://github.com/dauparas/ProteinMPNN.git
-%cd ProteinMPNN
-!pip install -q biopython pymoo matplotlib
-!mkdir -p polyphage outputs inputs/pdbs inputs/design_target
+    md("""
+## Cell 1 — Environment
 
-import sys
+`POLYPHAGE_REF` selects which commit of the project to run: a branch, a tag or a
+SHA. The code is cloned from GitHub rather than written out by this notebook, so
+what runs is always what is pushed — change a module, push it, re-run this cell.
+
+The cell prints the SHA it cloned. **Record that SHA with any result you
+report** — it is the only thing that identifies which code produced a number
+after the fact, and a result whose code version is unknown cannot go in a paper.
+
+The notebook's own build SHA is printed beside it for provenance. The two
+normally differ by a commit or two, which is harmless: the cloned code is what
+runs, and the notebook only supplies the orchestration around it.
+"""),
+    code(f"""
+POLYPHAGE_REF = "main"   # branch, tag or commit to run
+
+!git clone -q https://github.com/dauparas/ProteinMPNN.git
+%cd ProteinMPNN
+!pip install -q biopython pymoo pandas matplotlib
+
+import subprocess, sys
+
+!rm -rf /content/pp_src /content/ProteinMPNN/polyphage
+# Full clone, then checkout: `clone --branch` rejects a bare commit SHA, and
+# POLYPHAGE_REF is documented to accept one.
+subprocess.run(["git", "clone", "-q", "{REPO}", "/content/pp_src"], check=True)
+subprocess.run(
+    ["git", "-C", "/content/pp_src", "checkout", "-q", POLYPHAGE_REF], check=True
+)
+!cp -r /content/pp_src/polyphage /content/ProteinMPNN/polyphage
+!mkdir -p outputs inputs/pdbs inputs/design_target
+
 sys.path.insert(0, '/content/ProteinMPNN')
-print('ready')
+
+sha = subprocess.run(
+    ["git", "-C", "/content/pp_src", "rev-parse", "--short", "HEAD"],
+    capture_output=True, text=True,
+).stdout.strip()
+print(f"polyphage code : {{sha}}  (ref: {{POLYPHAGE_REF}})")
+print(f"notebook built : {BUILD_SHA}")
+print()
+print(f"Record `polyphage @ {{sha}}` with any result from this session. It is")
+print("the only thing that makes a run identifiable after the fact.")
+print("ready")
 """),
     md("""
-## Cell 2 — Write the polyphage package
-
-These cells write the project modules to disk. Nothing to upload or mount.
+> **Do not use Colab's *Save a copy to GitHub* on this notebook.** It commits
+> your in-session copy over the repository's, which is how commit `c78ce43`
+> reverted the notebook on `main`. The notebook is generated: edit the modules
+> or `build_notebook.py`, run `python3 build_notebook.py`, and commit that.
 """),
-]
-
-for name in MODULES:
-    source = (HERE / "polyphage" / name).read_text().rstrip("\n")
-    cells.append(code(f"%%writefile polyphage/{name}\n{source}"))
-
-cells += [
     md("## Cell 3 — Fetch and parse the structure"),
     code("""
 import urllib.request, shutil

@@ -110,8 +110,22 @@ results/           run log and figures
 
 **`Polyphage.ipynb` is generated.** Edit the modules, then run
 `python3 build_notebook.py` to regenerate it. Hand-edits to the notebook are
-discarded by the next build. Never commit a notebook downloaded from Colab —
-it carries embedded outputs that make diffs unreadable.
+discarded by the next build.
+
+> **Never use Colab's *Save a copy to GitHub* on this notebook.** It commits your
+> in-session copy over the repository's. Commit `c78ce43` did exactly that: it
+> reverted `Polyphage.ipynb` on `main` to a pre-fix version, removing cells that
+> had been merged an hour earlier, while the repository's `.py` files stayed
+> correct. The result was a notebook that ran stale code with nothing saying so,
+> and several debugging rounds spent on symptoms of the drift.
+
+The notebook no longer embeds the modules as `%%writefile` cells, which is what
+made that failure invisible. Cell 1 clones `polyphage` from GitHub at
+`POLYPHAGE_REF` (a branch, tag or commit) and prints the SHA it got beside the
+SHA the notebook was built from. **What runs is whatever is pushed** — so a
+change has to be committed before it can be tested, which is the right
+constraint for results that have to be reproducible. To test a feature branch,
+change `POLYPHAGE_REF` in Cell 1.
 
 ## Usage
 
