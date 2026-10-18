@@ -28,6 +28,24 @@ DURA_PETASE = {
 
 KNOWN_HOTSPOTS = set(FAST_PETASE) | set(DURA_PETASE)
 
+#: Every experimentally confirmed (position, residue) pair. 14 of them: the two
+#: variants share position 280, and agree that it should be alanine.
+EXACT_TABLES = (("FAST", FAST_PETASE), ("Dura", DURA_PETASE))
+
+
+def exact_match_labels(resnum: int, aa: str) -> list[str]:
+    """Labels for a mutation that matches the literature, e.g. ``['Dura:140D']``.
+
+    Shared by the front reporter and the randomization control so the two can
+    never disagree about what counts as a match -- the control's p-values are
+    meaningless if it is scoring a different event than the one observed.
+    """
+    return [
+        f"{name}:{resnum}{aa}"
+        for name, table in EXACT_TABLES
+        if table.get(resnum) == aa
+    ]
+
 
 @dataclass
 class VariantReport:
@@ -54,9 +72,7 @@ def report_front(target, res, objective_names: list[str]) -> list[VariantReport]
 
         exact = []
         for rn, _, mt in muts:
-            for name, table in (("FAST", FAST_PETASE), ("Dura", DURA_PETASE)):
-                if table.get(rn) == mt:
-                    exact.append(f"{name}:{rn}{mt}")
+            exact.extend(exact_match_labels(rn, mt))
 
         reports.append(
             VariantReport(
