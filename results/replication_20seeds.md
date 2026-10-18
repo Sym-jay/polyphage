@@ -6,9 +6,10 @@
 **Objectives:** `mpnn_nll` (ProteinMPNN), `ddg` (ThermoMPNN), `neg_n_mutations`
 **Cost:** ~140 s per seed, ~46 min total on a T4
 
-> **Status: D186H survives all three nulls that have been run.** One stronger
-> null remains untested — see *The position half of the prior*. Treat the
-> result as solid but not yet maximally controlled.
+> **Status: complete.** D186H survives all four nulls, including the strongest
+> one available — ThermoMPNN's ddG prior weighting both residue choice and
+> position choice. No further control is outstanding. Read *Limits* before
+> deciding how much weight this carries.
 
 ## Search behaviour
 
@@ -66,17 +67,63 @@ the search.
 | Dura:140D | 1/20 | 0.0032 | 0.2484 | no | 2.1× |
 | Dura:165A | 1/20 | 0.0048 | 0.2484 | no | 2.2× |
 
-### Summary
+### ThermoMPNN ddG prior, residue **and** position
 
-| Null | Survives |
-|---|---|
-| Uniform | FAST:186H (p = 0.0030) |
-| ProteinMPNN prior | FAST:186H (p = 0.0318) |
-| ThermoMPNN ddG prior | FAST:186H (p = 0.0077) |
-| ddG prior, residue **and** position | not yet run |
+The strongest null available: ThermoMPNN steers both which positions get
+mutated and which residue goes there, matching what the three-objective search
+was actually told.
 
-**D186H survives every null tested.** Recovered in seeds 6 and 11; seed 6 also
-produced N233K.
+| Mutation | Found | p (Holm) | Verdict |
+|---|---|---|---|
+| **FAST:186H** | 2/20 | **0.0339** | survives |
+| Dura:165A | 1/20 | 0.1416 | no |
+| Dura:168R | 1/20 | 0.1551 | no |
+| Dura:140D | 1/20 | 0.1551 | no |
+| FAST:233K | 1/20 | 0.2295 | no |
+
+### Summary — D186H across all four nulls
+
+| Null | p (Holm) | Implied chance/run | Enrichment vs uniform |
+|---|---|---|---|
+| Uniform | 0.0030 | 0.0018 | 1.0× |
+| ProteinMPNN prior | 0.0318 | 0.0060 | 3.3× |
+| ddG prior, residue only | 0.0077 | 0.0029 | 1.6× |
+| **ddG prior, residue + position** | **0.0339** | 0.0062 | 3.4× |
+
+**D186H survives every null, including the strongest.** Recovered in seeds 6 and
+11; seed 6 also produced N233K.
+
+Adding position weighting doubled the enrichment, 1.6× → 3.4×, which confirms
+that the residue-only null was understating the comparison. It did not change
+the verdict.
+
+## The claim this supports
+
+> A multi-objective structure-based search recovers D186H — an experimentally
+> validated FAST-PETase thermostability mutation (Lu et al. 2022, *Nature*) — in
+> 2 of 20 independent runs (10%, 95% CI [3%, 30%]), above chance under four
+> progressively stricter nulls, including one matched to the stability model
+> that steered the search (p = 0.034, Holm-corrected across five candidate
+> mutations). The search had no access to the publication identifying it.
+
+## Limits
+
+State these alongside the claim; they bound it hard.
+
+- **One mutation of fourteen.** Four other candidates appeared once each and
+  none clears correction. The method recovers *some* known biology above
+  chance, not the known set.
+- **A 10% recovery rate with a wide interval.** [3%, 30%] at n = 20. Fifty seeds
+  would tighten it; the point estimate may move.
+- **Recovery is not design.** Rediscovering a published mutation says the search
+  finds real signal. It says nothing about the *other* mutations on these
+  fronts, which remain unvalidated candidates.
+- **Nothing here measures catalysis.** ddG predicts folding stability. These
+  variants are not shown to degrade PET faster, or at all.
+- **One protein, one backbone.** 6EQE only. Whether this generalises is untested.
+- **The null uses `n_mutations=9` while fronts span 4–10.** Chance rises with
+  mutation count, so this is conservative rather than wrong — but it should be
+  matched per variant before publication.
 
 ## Reading
 
@@ -95,10 +142,11 @@ any reasonable null, which is the point of running 20 seeds rather than one.
 
 ## The position half of the prior
 
-The ddG null enriched D186H only **1.6×** over uniform, which is far less than
-expected for a substitution ThermoMPNN ranks at percentile 1 of 5035. That gap
-is informative, and it exposes a weakness in the control rather than a
-surprise about the data.
+*Resolved — kept because it explains why the final null differs from the third.*
+
+The residue-only ddG null enriched D186H just **1.6×** over uniform, far less
+than expected for a substitution ThermoMPNN ranks at percentile 1 of 5035. That
+gap exposed a weakness in the control rather than a fact about the data.
 
 `ddg_prior_sampler` normalises *within* a position: given that 186 is being
 mutated, how likely is histidine? A global percentile says nothing about that —
@@ -119,17 +167,9 @@ rates = null_rate_per_run(
 print_replication(retest(result, rates))   # reuses the sweep, seconds not minutes
 ```
 
-**This has not been run.** It is the last control standing between the current
-result and a claim that is maximally defended. If D186H survives it too, the
-search is contributing signal beyond ThermoMPNN's prior on both axes. If it does
-not, the honest conclusion is that the stability model located the position and
-the search delivered it — a clean negative result that is worth reporting, and
-which almost nobody checks.
-
-**Minor:** the null rates use `n_mutations=9` while the front spans 4–10
-mutations. Chance rises with mutation count, so this overstates the chance rate
-for smaller variants and makes the test conservative rather than wrong. Worth
-matching per variant before publication.
+Running it raised D186H's implied chance rate from 0.0029 to 0.0062 — the
+enrichment roughly doubled, confirming that position choice was the missing
+half. D186H survived regardless, at p = 0.0339.
 
 ## Reproducing
 

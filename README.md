@@ -42,25 +42,30 @@ claim that was just withdrawn.
 A 20-seed replication of the three-objective search
 ([`results/replication_20seeds.md`](results/replication_20seeds.md)):
 
-| Mutation | Found | p uniform | p MPNN-prior | p ddG-prior | ThermoMPNN pct |
-|---|---|---|---|---|---|
-| **FAST:186H** | 2/20 | **0.0030** | **0.0318** | **0.0077** | 1 |
-| FAST:233K | 1/20 | 0.1027 | 1.0000 | 0.2484 | 0 |
-| Dura:168R | 1/20 | 0.1027 | 0.3303 | 0.2484 | 19 |
-| Dura:140D | 1/20 | 0.1027 | 1.0000 | 0.2484 | 18 |
-| Dura:165A | 1/20 | 0.1027 | 1.0000 | 0.2484 | 39 |
+**D186H — a FAST-PETase thermostability mutation (Lu et al. 2022) — is recovered
+in 2 of 20 independent runs, above chance under every null tested.** The search
+had no access to the paper identifying it.
 
-5 of 20 seeds recovered some exact literature mutation (25%, 95% CI [11%, 47%])
-against a 2.5% chance rate — p = 1.1 × 10⁻⁴ in aggregate. **D186H survives every
-null tested**, including ThermoMPNN's own ddG prior, which is the control that
-matters for a three-objective run.
+| Null | p (Holm) | Chance/run | Enrichment |
+|---|---|---|---|
+| Uniform | 0.0030 | 0.0018 | 1.0× |
+| ProteinMPNN prior | 0.0318 | 0.0060 | 3.3× |
+| ddG prior, residue | 0.0077 | 0.0029 | 1.6× |
+| **ddG prior, residue + position** | **0.0339** | 0.0062 | 3.4× |
 
-**One stronger null remains.** The ddG null enriched D186H only 1.6× over
-uniform, far less than its percentile-1 rank would suggest, because
-`ddg_prior_sampler` normalises *within* a position — it models "which residue
-here", not "which positions are worth touching". `ddg_position_weights` supplies
-the missing half. Running both together is the last control between this result
-and a maximally defended claim, and it costs seconds via `retest`.
+The last row is the strongest control available: ThermoMPNN steering both which
+positions are mutated and which residue goes there, matching what the
+three-objective search was actually told. Four other candidate mutations
+appeared once each and none clears correction.
+
+In aggregate, 5 of 20 seeds recovered some exact literature mutation (25%, 95%
+CI [11%, 47%]) against a 2.5% chance rate — p = 1.1 × 10⁻⁴.
+
+**What this does not say.** One mutation of fourteen, at a 10% recovery rate
+with a wide interval [3%, 30%]. Recovering a published mutation shows the search
+finds real signal; it says nothing about the other mutations on these fronts,
+and nothing at all about catalysis. Full limits in
+[`results/replication_20seeds.md`](results/replication_20seeds.md).
 
 ### The third objective fixes the degenerate front
 
@@ -96,7 +101,7 @@ validation, which *is* a defensible result, is in
 | Randomization control (uniform) | **Run** on the 20-seed replication |
 | Randomization control (ProteinMPNN prior) | **Run** on the 20-seed replication |
 | Randomization control (ThermoMPNN ddG prior, residue) | **Run** — D186H survives |
-| Randomization control (ddG prior, residue + position) | Implemented, **never run** — the last one |
+| Randomization control (ddG prior, residue + position) | **Run** — D186H survives |
 | Replication across seeds | **Done** — 20 seeds, see [`results/replication_20seeds.md`](results/replication_20seeds.md) |
 | ThermoMPNN ddG | **Working, verified end to end** (100% coverage, sign confirmed) |
 | ThermoMPNN zero-shot validation | **Done** — see [`results/thermompnn_validation.md`](results/thermompnn_validation.md) |
@@ -303,11 +308,10 @@ Stated plainly, because they bound what this project can claim:
    significant against the uniform and ProteinMPNN-prior nulls.
 4. ~~The ddG-prior null on that replication.~~ **Done** — D186H survives at
    p = 0.0077.
-5. **The ddG null with position weighting.** The last outstanding control, and
-   seconds of compute via `retest`. The residue-only null enriched D186H just
-   1.6× despite its percentile-1 rank, because it models "which residue here"
-   and not "which positions at all".
-6. Extend to 50 seeds if D186H survives that too, to tighten [11%, 47%].
+5. ~~The ddG null with position weighting.~~ **Done** — D186H survives at
+   p = 0.0339. All controls are now run.
+6. **Extend to 50 seeds**, to tighten the 10% recovery rate's [3%, 30%]
+   interval. ~2 h on a T4; `retest` re-scores against every null for free.
 7. Activity screen on top candidates: ESMFold → triad geometry check → PET
    oligomer docking (AutoDock Vina / GNINA), measuring Ser160 OG to ester
    carbonyl distance. This is the part that speaks to actual plastic degradation.
