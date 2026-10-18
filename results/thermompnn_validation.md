@@ -74,8 +74,12 @@ pointing at it. Any ddG-driven result must be tested against
 `ddg_prior_sampler`, the null that samples replacement residues weighted by
 ThermoMPNN's predictions, not against the uniform null alone.
 
-The two-objective run that originally recovered T140D is unaffected by this: it
-had no access to ThermoMPNN. Its correct control is `mpnn_prior_sampler`.
+The two-objective run that originally recovered T140D had no access to
+ThermoMPNN, so its correct control would have been `mpnn_prior_sampler` — but
+that run has since been **withdrawn**: it predated the reproducibility fix, and
+re-running its configuration under the fixed code produces no exact literature
+match at all. The percentile figures above stand regardless, because they
+describe ThermoMPNN's ranking rather than anything the search did.
 
 ## Caveat worth reporting
 
