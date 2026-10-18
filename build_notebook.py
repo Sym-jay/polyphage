@@ -415,26 +415,82 @@ print_front(reports)
 log_run({**config, "objectives": names}, reports, wall)
 """),
     md("""
-## Cell 16 — Control the new front, then repeat across seeds
+## Cell 16 — Control the new front
 
-One run recovering a known mutation could be luck in the search itself, separate
-from luck in the null. Several seeds recovering it is a property of the method.
+Two nulls, and they answer different questions. Report both.
 """),
     code("""
-control = run_control(target, reports, n_samples=5000)
+from polyphage import mpnn_prior_sampler, run_control
+
+# Null 1: uniform random mutation. "Did the search beat chance?"
+control = run_control(target, reports, n_samples=5000, label="uniform")
+"""),
+    md("""
+### Cell 16b — The stricter null
+
+The uniform null cannot answer the question a reviewer asks next: **did the
+optimiser find this mutation, or does ProteinMPNN's prior already put mass on
+it?** T140D only counts if the search located it. If the model assigns aspartate
+high probability at 140 from the backbone alone, any method sampling from the
+model would stumble on it, and the search deserves no credit.
+
+This null keeps position selection uniform — the optimiser is not told which
+positions to change either — but draws the replacement residue from the model's
+own conditional distribution. A mutation that survives *this* was found by the
+search, not handed to it.
 """),
     code("""
-from polyphage import repeat_seeds_summary
+strict = mpnn_prior_sampler(target, batch)
+control_strict = run_control(
+    target, reports, n_samples=5000, aa_sampler=strict, label="ProteinMPNN-prior"
+)
+"""),
+    md("""
+## Cell 17 — Replication (this is the result)
 
-per_seed = {}
-for seed in [1, 2, 3, 4, 5]:
-    r = run(target, objectives, pop_size=40, n_gen=25, max_mutations=10,
-            seed=seed, verbose=False)
-    per_seed[seed] = report_front(target, r, names)
-    print(f"seed {seed}: {len(per_seed[seed])} variants")
+One run recovering a known mutation is an anecdote. The reportable claim is
+"the method recovers this mutation in k of n independent runs, 95% CI [lo, hi],
+against a chance rate of p".
 
-summary = repeat_seeds_summary(per_seed)
-print("\\nrecovery across seeds:", summary["recovery_rate"])
+**This is the cell that produces the paper's headline number.** Budget for it:
+20 seeds at the Cell 15 configuration is roughly 20 x 2.5 min on a T4. Start
+with `SEEDS = range(1, 6)` to confirm the plumbing, then go to 20-50.
+
+Watch the front-diversity line. If it warns, the fronts are near-duplicate
+lineages and the variant count overstates how many distinct solutions the
+search actually found — which is exactly what happened in this project's run 2,
+where a two-member front shared seven of nine mutations.
+"""),
+    code("""
+from polyphage import null_rate_per_run, print_replication, replicate
+
+SEEDS = range(1, 21)   # start at range(1, 6) to smoke-test the plumbing
+
+# Chance rate per run, measured rather than assumed. Match n_mutations to the
+# mutation count of the variants you are actually comparing against.
+null_rates = null_rate_per_run(target, n_mutations=9, n_samples=20000)
+
+result = replicate(
+    target, objectives, seeds=SEEDS,
+    pop_size=40, n_gen=25, max_mutations=10,
+    null_rate_per_run=null_rates,
+)
+print_replication(result)
+"""),
+    md("""
+Run the same thing against the stricter null to get the second column of the
+table. A mutation significant under the uniform null but not under this one was
+supplied by ProteinMPNN's prior, not discovered by the search — and saying so
+plainly is far stronger than being asked about it in review.
+"""),
+    code("""
+strict_rates = null_rate_per_run(
+    target, n_mutations=9, n_samples=20000, aa_sampler=strict
+)
+for rec in result.recoveries:
+    u = null_rates.get(rec.mutation, 0.0)
+    s = strict_rates.get(rec.mutation, 0.0)
+    print(f"  {rec.mutation:<14} chance(uniform)={u:.4f}  chance(prior)={s:.4f}")
 """),
     md("""
 ---
