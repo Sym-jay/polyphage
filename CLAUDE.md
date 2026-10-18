@@ -116,7 +116,21 @@ Cell 1 clones `polyphage` from GitHub at `POLYPHAGE_REF` rather than embedding
 the modules, which is what made that failure invisible. The consequence worth
 knowing: **what runs in Colab is whatever is pushed**, so a change has to be
 committed before it can be tested there. To test a branch, change
-`POLYPHAGE_REF` in Cell 1.
+`POLYPHAGE_REF` in Cell 1 — but merged branches are deleted on this repository,
+so once a PR lands, `"main"` is the only ref that resolves.
+
+**Replacing the files on disk is not enough to change what runs.** Python serves
+whatever it imported first, so a fresh clone is silently ignored by a session
+that has already imported the package. Cell 1 now purges `sys.modules` for this
+reason, and any cell that swaps the code by hand must do the same:
+
+```python
+for m in [m for m in sys.modules if m.startswith("polyphage")]:
+    del sys.modules[m]
+```
+
+This failure mode has cost several debugging rounds. It presents as a fix that
+"didn't work" — the error message comes from code that is no longer on disk.
 
 ## Testing conventions
 

@@ -80,6 +80,11 @@ Reference structures: `6EQE` = wild-type IsPETase (the design target),
 SHA. The code is cloned from GitHub rather than written out by this notebook, so
 what runs is always what is pushed — change a module, push it, re-run this cell.
 
+Re-running this cell is enough to pick up new code: it re-clones *and* drops the
+already-imported modules, so Python does not keep serving the version it loaded
+first. Note that merged branches are deleted on this repository, so once a
+PR lands, `"main"` is the only ref that will resolve.
+
 The cell prints the SHA it cloned. **Record that SHA with any result you
 report** — it is the only thing that identifies which code produced a number
 after the fact, and a result whose code version is unknown cannot go in a paper.
@@ -104,6 +109,13 @@ subprocess.run(
 !mkdir -p outputs inputs/pdbs inputs/design_target
 
 sys.path.insert(0, '/content/ProteinMPNN')
+
+# Drop any already-imported copy. Re-running this cell replaces the files on
+# disk, but Python keeps whatever it imported first, so without this the fresh
+# clone is ignored and the session silently keeps running the old code. That
+# has cost several debugging rounds on this project; it is two lines.
+for _m in [_m for _m in sys.modules if _m.startswith('polyphage')]:
+    del sys.modules[_m]
 
 sha = subprocess.run(
     ["git", "-C", "/content/pp_src", "rev-parse", "--short", "HEAD"],
