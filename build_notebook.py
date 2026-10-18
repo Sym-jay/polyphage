@@ -23,25 +23,17 @@ worth knowing:
 """
 
 import json
-import subprocess
 from pathlib import Path
 
 HERE = Path(__file__).parent
 REPO = "https://github.com/Sym-jay/polyphage"
 
-
-def build_sha() -> str:
-    """The commit this notebook was generated from, stamped into Cell 1."""
-    try:
-        return subprocess.run(
-            ["git", "-C", str(HERE), "rev-parse", "--short", "HEAD"],
-            capture_output=True, text=True, check=True,
-        ).stdout.strip() or "unknown"
-    except Exception:
-        return "unknown"
-
-
-BUILD_SHA = build_sha()
+# This script is deliberately idempotent: running it twice on an unchanged tree
+# produces a byte-identical notebook. An earlier version stamped Cell 1 with the
+# build-time HEAD, which meant every rebuild dirtied Polyphage.ipynb whether or
+# not anything had actually changed -- spurious diffs on every commit, and a
+# `git status` nobody could trust after a rebuild. The provenance that matters
+# is the SHA Cell 1 prints at *runtime* from the clone it actually ran.
 
 
 def md(text):
@@ -91,10 +83,6 @@ what runs is always what is pushed — change a module, push it, re-run this cel
 The cell prints the SHA it cloned. **Record that SHA with any result you
 report** — it is the only thing that identifies which code produced a number
 after the fact, and a result whose code version is unknown cannot go in a paper.
-
-The notebook's own build SHA is printed beside it for provenance. The two
-normally differ by a commit or two, which is harmless: the cloned code is what
-runs, and the notebook only supplies the orchestration around it.
 """),
     code(f"""
 POLYPHAGE_REF = "main"   # branch, tag or commit to run
@@ -122,7 +110,6 @@ sha = subprocess.run(
     capture_output=True, text=True,
 ).stdout.strip()
 print(f"polyphage code : {{sha}}  (ref: {{POLYPHAGE_REF}})")
-print(f"notebook built : {BUILD_SHA}")
 print()
 print(f"Record `polyphage @ {{sha}}` with any result from this session. It is")
 print("the only thing that makes a run identifiable after the fact.")
