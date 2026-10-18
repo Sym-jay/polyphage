@@ -16,29 +16,64 @@ natural enzyme falls apart before the plastic is soft enough to chew.
 
 ## Results so far
 
-A 1000-candidate run (40 individuals × 25 generations, 142 s on a T4) produced:
+A 1000-candidate run (run 2: 40 individuals × 25 generations, 142 s on a T4)
+produced:
 
 ```
 n_mut=9   mpnn_nll=1.3151   N37Q R53S T77K K95A T116A T140D Q228A R260F H293V
 n_mut=10  mpnn_nll=1.3303   N37Q R53S T77K K95A T116A Q228A R260F T270N S290A H293I
 ```
 
-Two things worth noting. Both score better than wild-type (1.3783) under
-ProteinMPNN. And the first contains **T140D** — position 140, threonine to
-aspartate — which is one of the ten mutations in
-[DuraPETase](https://doi.org/10.1038/s41467-021-27136-4) (Cui et al. 2021), an
-experimentally validated heat-stable PETase. The search had no access to that
-paper; it recovered the mutation from structure alone.
+Both score better than wild-type (1.3783) under ProteinMPNN, and the first
+contains **T140D** — position 140, threonine to aspartate — one of the ten
+mutations in [DuraPETase](https://doi.org/10.1038/s41467-021-27136-4)
+(Cui et al. 2021), an experimentally validated heat-stable PETase. The search
+had no access to that paper; it recovered the mutation from structure alone.
 
-**This is not yet a validated claim.** With 15 known hotspot positions among 262
-mutable ones, a 9-mutation variant hits *some* hotspot roughly 40% of the time by
-chance. The randomization control in `polyphage/control.py` measures this against
-an explicit null, and has not been run yet. Treat T140D as promising until that
-number exists.
+**None of this is a validated claim yet.** Four caveats, in order of severity:
 
-![Pareto front](results/pareto_front.png)
+1. **The run predates the reproducibility fix.** Until commit
+   `fix/reproducibility-and-thermompnn`, the optimizer's operators drew from OS
+   entropy rather than the run seed, so *this specific front cannot be
+   regenerated*. It must be re-run before it is reported anywhere.
+2. **The front has two members that share seven mutations** — one converged
+   lineage plus a neighbour, not two independent discoveries. The effective
+   sample size behind T140D is **1**.
+3. **Position-level overlap is near-worthless evidence.** With 14 known hotspot
+   positions among 262 mutable ones, a 9-mutation variant hits *some* hotspot
+   39% of the time by chance (simulated). Only the exact position-and-residue
+   match carries signal: ~2.5% by chance, which makes T140D suggestive at best
+   from a single observation.
+4. **The randomization control has still not been run.** `polyphage/control.py`
+   measures both numbers against an explicit null. Treat T140D as a lead until
+   that output exists.
+
+![Pareto front from the run-1 smoke test](results/pareto_front.png)
+
+**Note the figure is from run 1, not run 2** — the 7.3 s smoke test (12
+individuals × 5 generations). Every point on it is worse than wild-type on both
+axes and the front is nearly a straight line, which by this project's own
+criterion means the two objectives are not in genuine conflict. It is kept as an
+illustration of that failure mode, not as a result. Regenerate it from run 2
+before using it anywhere.
 
 Full run log: [`results/runs.jsonl`](results/runs.jsonl).
+
+## Status
+
+| Component | State |
+|---|---|
+| Residue mapping + triad gate | Working, gated, tested |
+| ProteinMPNN batch scorer | Working, checked against the reference path |
+| NSGA-II search | Working; **reproducible as of this branch** |
+| Randomization control | Implemented, **never run** |
+| ThermoMPNN ddG | Fixed on this branch, **not yet re-run end to end** |
+| Activity / docking screen | Not started |
+| Wet-lab validation | Not started |
+
+Run the tests with `python -m pytest tests/ -q`. They need neither a GPU nor
+ProteinMPNN: both the target and the scoring model are synthetic, because what
+is under test is the search's RNG plumbing and the ddG residue mapping.
 
 ## Reference structures
 
@@ -65,6 +100,7 @@ polyphage/
   validate.py    hotspot overlap, front reporting, run log, plotting
   control.py     randomization control against an explicit null
   stability.py   ThermoMPNN ddG via a cached site-saturation table
+tests/             reproducibility and ddG-mapping regression tests (no GPU needed)
 build_notebook.py  generates Polyphage.ipynb
 results/           run log and figures
 ```
@@ -115,6 +151,35 @@ Otherwise NSGA-II ranks candidates by dice.
 once on the wild-type and is cached as a table, so scoring a variant inside the
 loop is a handful of lookups.
 
+**The seed has to actually reach the operators.** pymoo passes operators a
+seeded generator under `random_state`; it has never passed one under `seed`.
+Reading `kwargs.get("seed")` returned `None`, `np.random.default_rng(None)` then
+drew from OS entropy, and every run was irreproducible while still recording
+`"seed": 1` in the log. `tests/test_reproducibility.py` fails if this regresses.
+
+## Two bugs worth knowing about
+
+Both were live in the code that produced the results above, and both were the
+kind that fail quietly rather than loudly.
+
+**Irreproducible runs.** Described just above. Consequence: no previously logged
+run can be regenerated, and `repeat_seeds_summary` was not varying what its name
+claims. Fixed on this branch.
+
+**ThermoMPNN residue numbering.** ThermoMPNN's SSM output indexes positions
+0-based along the sequence; the design target uses PDB numbering, which on 6EQE
+starts at residue 29. Reading one as the other shifted every ddG by 29 residues
+— and because ~89% of positions still overlapped numerically, the coverage check
+passed. The parser now maps through `target.residue_numbers` and verifies the
+wildtype letter on every row, so a mismatch raises instead of silently poisoning
+the objective. Any ddG number produced before this fix should be discarded.
+
+A related trap, not a bug but worth stating: nothing in the pipeline would
+notice if ThermoMPNN's ddG sign were inverted — the optimizer would simply
+minimize toward the *least* stable variants. `StabilityOracle.check_sign_convention()`
+tests the sign against the known heat-stable mutations and should be run before
+any three-objective search.
+
 ## Limitations
 
 Stated plainly, because they bound what this project can claim:
@@ -129,15 +194,33 @@ Stated plainly, because they bound what this project can claim:
   ground truth.
 - **Stability and activity can trade off.** Rigidifying a protein can stiffen the
   active site it needs for chemistry.
+- **Beating wild-type on ProteinMPNN NLL is expected, not a finding.** Natural
+  enzymes sit off the inverse-folding optimum because evolution trades stability
+  against function and regulation. A lower NLL than wild-type is a known
+  property of these models, so it cannot carry a result on its own.
+- **`novelty_objective` is not a real objective.** Maximising mutation count is
+  not a property anyone wants in an enzyme; it exists to give the front a second
+  axis. Until ddG or activity replaces it, the two-objective front is closer to
+  a diversity sweep than a trade-off.
 
 ## Roadmap
 
-1. Randomization control on the T140D finding — gates whether it can be claimed.
-2. Three-objective runs: foldability + ddG + mutation count.
-3. Activity screen on top candidates: ESMFold → triad geometry check → PET
+1. **Re-run everything under the reproducibility fix.** No pre-fix number is
+   citable. This gates all of the below.
+2. Randomization control on the T140D finding — gates whether it can be claimed.
+3. Replication: 20–50 independent seeds at the run-2 configuration, reporting
+   recovery rate per known mutation with confidence intervals, rather than one
+   anecdote. `repeat_seeds_summary` aggregates this.
+4. Three-objective runs: foldability + ddG + mutation count, after
+   `check_sign_convention()` passes.
+5. A stricter null — random variants drawn from ProteinMPNN's own
+   high-likelihood region. This separates "the optimizer found it" from "the
+   model's prior already favoured it", which is the first question a reviewer
+   will ask.
+6. Activity screen on top candidates: ESMFold → triad geometry check → PET
    oligomer docking (AutoDock Vina / GNINA), measuring Ser160 OG to ester
    carbonyl distance. This is the part that speaks to actual plastic degradation.
-4. FastAPI + Docker serving layer, so other researchers can supply their own
+7. FastAPI + Docker serving layer, so other researchers can supply their own
    constraints and get ranked sequences back.
 
 ## How this was built

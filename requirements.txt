@@ -1,5 +1,12 @@
 biopython>=1.81
-pymoo>=0.6.0
+# 0.6.2 is the first release that hands operators a seeded `random_state`
+# generator. On older 0.6.x the operators fall back to a per-run seeded
+# generator, which is still reproducible but does not match pymoo's own stream.
+pymoo>=0.6.2
 numpy>=1.24
+pandas>=2.0
 matplotlib>=3.7
 torch>=2.0
+
+# tests only
+pytest>=7.0
