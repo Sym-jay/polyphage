@@ -52,6 +52,32 @@ D283R. Note the clustering: Q127, N233, N225 and R260 each appear with multiple
 favourable substitutions, suggesting position-level hotspots rather than
 isolated point effects.
 
+## Is this really zero-shot?
+
+The first question a reviewer will ask: if ThermoMPNN was trained on IsPETase
+stability data, "recovering" known mutations proves nothing. It was not, and the
+exclusion is structural rather than probabilistic.
+
+ThermoMPNN (Dieckhaus et al. 2024) trains on the Megascale dataset (Tsuboyama et
+al. 2023, *Nature*), which measures folding stability by **cDNA display
+proteolysis**. That assay covers 331 natural and 148 de novo designed domains of
+**40–72 amino acids**.
+
+IsPETase chain A of 6EQE is **265 modeled residues** (29–293) — roughly four
+times the upper bound. It is not in Megascale, and could not be: the assay
+cannot measure a protein that size. Nor could a homolog sneak in, since no 40–72
+residue fragment is a functional α/β hydrolase.
+
+FAST-PETase (2022) and DuraPETase (2021) are likewise absent, being variants of
+the same oversized protein.
+
+So the percentiles above are genuine zero-shot transfer: ThermoMPNN ranks these
+mutations highly without having seen this protein, this fold at this size, or
+the publications that identified them.
+
+**State this explicitly in any write-up.** It is cheap to say and it closes the
+most obvious line of attack on both this result and the replication.
+
 ## Sign convention
 
 Verified, not assumed. `StabilityOracle.check_sign_convention()` reports
