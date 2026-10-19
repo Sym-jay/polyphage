@@ -607,6 +607,33 @@ save_replication(result, "replication.json")
 from google.colab import files; files.download("replication.json")
 """),
     md("""
+## Cell 18 — The baseline (run this before writing anything up)
+
+The first question anyone will ask: **what happens without the search?**
+
+ThermoMPNN's table already ranks N233K — a FAST-PETase mutation — inside its top
+ten substitutions on 6EQE. Stacking the best-scoring positions therefore
+recovers a known mutation *deterministically, in no compute at all*, while the
+search recovers something in 25% of runs. On recovery rate alone the baseline
+wins and the search is expensive decoration.
+
+The defence worth testing is that greedy stacking optimises ddG **alone**. It has
+no reason to produce a sequence that still folds, and summed ddG ignores
+epistasis, so a tall stack of individually-stabilising mutations can be a protein
+that does not fold. Compare `mpnn_nll` against wildtype and against the front: if
+the greedy variant loses foldability where the front holds it, the search is
+buying something real.
+
+Report this either way. A method that only looks good when the obvious
+alternative goes unmeasured is not a result.
+"""),
+    code("""
+from polyphage import compare_to_front, print_comparison
+
+comparison = compare_to_front(target, oracle, reports, scorer=batch, n_mutations=9)
+print_comparison(comparison)
+"""),
+    md("""
 ---
 
 ## What this does and does not show
