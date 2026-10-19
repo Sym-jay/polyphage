@@ -338,4 +338,8 @@ generated text. That verification step is part of the method, not an aside.
 - Cui et al. 2021, *Nature Communications* — DuraPETase
 - Dauparas et al. 2022, *Science* — [ProteinMPNN](https://github.com/dauparas/ProteinMPNN)
 - Dieckhaus et al. 2024, *PNAS* — [ThermoMPNN](https://github.com/Kuhlman-Lab/ThermoMPNN)
+- Tsuboyama et al. 2023, *Nature* — Megascale, ThermoMPNN's training set.
+  331 natural + 148 designed domains of **40–72 aa**, which is why IsPETase
+  (265 residues) cannot be in it. See
+  [`results/thermompnn_validation.md`](results/thermompnn_validation.md#is-this-really-zero-shot)
 - Deb et al. 2002, *IEEE Trans. Evol. Comput.* — NSGA-II
