@@ -11,6 +11,12 @@ from .encoding import (
     mutations,
     wildtype_vector,
 )
+from .baselines import (
+    BaselineVariant,
+    compare_to_front,
+    greedy_ddg_variant,
+    print_comparison,
+)
 from .control import (
     compare_to_null,
     ddg_position_weights,
@@ -53,6 +59,8 @@ __all__ = [
     "ObjectiveSpec", "foldability_objective", "novelty_objective", "run",
     "StabilityOracle", "stability_objective",
     "compare_to_null", "repeat_seeds_summary", "run_control",
+    "BaselineVariant", "compare_to_front", "greedy_ddg_variant",
+    "print_comparison",
     "ddg_position_weights", "ddg_prior_sampler",
     "mpnn_prior_sampler", "null_rate_per_run",
     "uniform_aa_sampler",

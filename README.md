@@ -135,6 +135,7 @@ polyphage/
   scoring.py     ProteinMPNN foldability; batched + subprocess reference
   optimize.py    NSGA-II problem, categorical operators, objective specs
   validate.py    hotspot overlap, front reporting, run log, plotting
+  baselines.py   the no-search control: greedy ddG stacking
   control.py     randomization controls: uniform and ProteinMPNN-prior nulls
   replicate.py   recovery rate across seeds, with CIs and Holm correction
   stability.py   ThermoMPNN ddG via a cached site-saturation table
@@ -310,12 +311,17 @@ Stated plainly, because they bound what this project can claim:
    p = 0.0077.
 5. ~~The ddG null with position weighting.~~ **Done** — D186H survives at
    p = 0.0339. All controls are now run.
-6. **Extend to 50 seeds**, to tighten the 10% recovery rate's [3%, 30%]
+6. **The greedy-ddG baseline.** Implemented in `baselines.py`, not yet run, and
+   it should be run before anything is written up. ThermoMPNN ranks N233K inside
+   its top ten substitutions, so stacking the best positions recovers a known
+   mutation deterministically — against the search's 25% of runs. The search has
+   to win on foldability instead, and that has not been measured.
+7. **Extend to 50 seeds**, to tighten the 10% recovery rate's [3%, 30%]
    interval. ~2 h on a T4; `retest` re-scores against every null for free.
-7. Activity screen on top candidates: ESMFold → triad geometry check → PET
+8. Activity screen on top candidates: ESMFold → triad geometry check → PET
    oligomer docking (AutoDock Vina / GNINA), measuring Ser160 OG to ester
    carbonyl distance. This is the part that speaks to actual plastic degradation.
-8. FastAPI + Docker serving layer, so other researchers can supply their own
+9. FastAPI + Docker serving layer, so other researchers can supply their own
    constraints and get ranked sequences back.
 
 ## How this was built
