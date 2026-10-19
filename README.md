@@ -37,7 +37,28 @@ The older `runs.jsonl` entries have been replaced rather than kept alongside,
 because an unreproducible run log is worse than none — it invites exactly the
 claim that was just withdrawn.
 
-### D186H: the first recovery with a claim behind it
+### A greedy baseline beats the search outright
+
+The first thing to know about this project. Rank ThermoMPNN's site-saturation
+table, keep the best substitution at each position, take the top nine. No
+search, no optimiser, no compute:
+
+```
+9 mutations: A33V T110I Q127L L216R N225T N233K R260W C273F D283R
+summed ddG : -11.971     mpnn_nll: 1.3601 (wild type 1.3779)
+recovers   : FAST:233K
+```
+
+**That dominates all 16 members of the three-objective Pareto front** — better
+on both objectives, by the same dominance test the search uses to build its
+front — and recovers a known mutation the search did not. The defence that
+greedy stacking would sacrifice foldability does not survive contact with the
+data: it folds better than wild type.
+
+Full comparison, the reasons the search probably loses, and the caveats in both
+directions: [`results/baseline_comparison.md`](results/baseline_comparison.md).
+
+### D186H: recovered, but against a baseline that does better
 
 A 20-seed replication of the three-objective search
 ([`results/replication_20seeds.md`](results/replication_20seeds.md)):
@@ -64,7 +85,11 @@ CI [11%, 47%]) against a 2.5% chance rate — p = 1.1 × 10⁻⁴.
 **What this does not say.** One mutation of fourteen, at a 10% recovery rate
 with a wide interval [3%, 30%]. Recovering a published mutation shows the search
 finds real signal; it says nothing about the other mutations on these fronts,
-and nothing at all about catalysis. Full limits in
+and nothing at all about catalysis.
+
+And it has to be read beside the baseline above: the search recovers *a* known
+mutation in 25% of runs, while greedy ranking recovers one in 100% of runs for
+no compute. Beating chance is not the same as being worth running. Full limits in
 [`results/replication_20seeds.md`](results/replication_20seeds.md).
 
 ### The third objective fixes the degenerate front
@@ -311,17 +336,20 @@ Stated plainly, because they bound what this project can claim:
    p = 0.0077.
 5. ~~The ddG null with position weighting.~~ **Done** — D186H survives at
    p = 0.0339. All controls are now run.
-6. **The greedy-ddG baseline.** Implemented in `baselines.py`, not yet run, and
-   it should be run before anything is written up. ThermoMPNN ranks N233K inside
-   its top ten substitutions, so stacking the best positions recovers a known
-   mutation deterministically — against the search's 25% of runs. The search has
-   to win on foldability instead, and that has not been measured.
-7. **Extend to 50 seeds**, to tighten the 10% recovery rate's [3%, 30%]
+6. ~~The greedy-ddG baseline.~~ **Done, and it changed the conclusion** — it
+   dominates all 16 front members on both objectives.
+   See [`results/baseline_comparison.md`](results/baseline_comparison.md).
+7. **Work out why the search loses to a table lookup.** The live hypotheses are
+   a 1,000-evaluation budget over a 262-position space, operators too local to
+   reach a nine-position optimum from wild type, and a novelty objective that
+   buys front spread with mutations that do nothing. Each is testable; none has
+   been tried. This now matters more than another 30 seeds.
+8. **Extend to 50 seeds**, to tighten the 10% recovery rate's [3%, 30%]
    interval. ~2 h on a T4; `retest` re-scores against every null for free.
-8. Activity screen on top candidates: ESMFold → triad geometry check → PET
+9. Activity screen on top candidates: ESMFold → triad geometry check → PET
    oligomer docking (AutoDock Vina / GNINA), measuring Ser160 OG to ester
    carbonyl distance. This is the part that speaks to actual plastic degradation.
-9. FastAPI + Docker serving layer, so other researchers can supply their own
+10. FastAPI + Docker serving layer, so other researchers can supply their own
    constraints and get ranked sequences back.
 
 ## How this was built
