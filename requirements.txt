@@ -8,5 +8,11 @@ pandas>=2.0
 matplotlib>=3.7
 torch>=2.0
 
+# catalytic geometry screen only (polyphage/geometry.py). The measurement half
+# needs nothing beyond biopython; these are for folding the candidates, which
+# happens once over ~20 sequences rather than inside any loop.
+transformers>=4.40
+accelerate>=0.30
+
 # tests only
 pytest>=7.0

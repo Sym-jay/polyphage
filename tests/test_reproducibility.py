@@ -85,6 +85,46 @@ def test_different_seeds_give_different_runs():
     )
 
 
+def test_seeding_the_population_moves_the_starting_point():
+    """Run B of the search diagnosis: start from somewhere other than wildtype."""
+    from polyphage.encoding import decode, vector_from_seq
+    from polyphage.optimize import WildtypeBiasedSampling
+
+    target = make_target()
+    # a sequence differing from wildtype at one mutable position
+    seed_list = list(target.wildtype_seq)
+    i = target.mutable_idx[0]
+    seed_list[i] = "W" if seed_list[i] != "W" else "Y"
+    seed_seq = "".join(seed_list)
+
+    sampler = WildtypeBiasedSampling(
+        target, min_mut=0, max_mut=0,          # perturb nothing, so the seed survives
+        seed_vector=vector_from_seq(target, seed_seq),
+    )
+    X = sampler._do(None, 4, random_state=np.random.default_rng(0))
+    assert all(decode(target, row) == seed_seq for row in X)
+
+
+def test_seeding_refuses_to_move_a_frozen_position():
+    """The catalytic triad is frozen; a seed that changes it is a silent bug."""
+    from polyphage.encoding import vector_from_seq
+
+    target = make_target()
+    bad = list(target.wildtype_seq)
+    j = target.fixed_idx[0]
+    bad[j] = "W" if bad[j] != "W" else "Y"
+    with pytest.raises(ValueError, match="frozen"):
+        vector_from_seq(target, "".join(bad))
+
+
+def test_seeding_refuses_a_sequence_of_the_wrong_length():
+    from polyphage.encoding import vector_from_seq
+
+    target = make_target()
+    with pytest.raises(ValueError, match="not the same protein"):
+        vector_from_seq(target, target.wildtype_seq[:-1])
+
+
 @pytest.mark.parametrize("key", ["seed", "random_state"])
 def test_rng_helper_prefers_pymoos_generator(key):
     """``_rng`` must take pymoo's generator and ignore the key that never arrives."""

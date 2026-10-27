@@ -130,6 +130,28 @@ def wildtype_vector(target: Target) -> np.ndarray:
     )
 
 
+def vector_from_seq(target: Target, seq: str) -> np.ndarray:
+    """The inverse of ``decode``: a full-length sequence back to a vector.
+
+    Lets the optimizer start somewhere other than wildtype -- from the greedy
+    baseline, say, to ask whether the search can refine a good answer even
+    though it cannot find one.
+    """
+    if len(seq) != len(target.wildtype_seq):
+        raise ValueError(
+            f"sequence is {len(seq)} residues, target is "
+            f"{len(target.wildtype_seq)}. These are not the same protein."
+        )
+    for i in target.fixed_idx:
+        if seq[i] != target.wildtype_seq[i]:
+            raise ValueError(
+                f"position {target.resnum(i)} is frozen as "
+                f"{target.wildtype_seq[i]} but this sequence has {seq[i]}. "
+                "The catalytic triad cannot be seeded away from wildtype."
+            )
+    return np.array([AA_TO_IDX[seq[i]] for i in target.mutable_idx], dtype=int)
+
+
 def decode(target: Target, x: np.ndarray) -> str:
     """Integer vector -> full-length sequence, with fixed positions untouched."""
     seq = list(target.wildtype_seq)

@@ -634,6 +634,90 @@ comparison = compare_to_front(target, oracle, reports, scorer=batch, n_mutations
 print_comparison(comparison)
 """),
     md("""
+## Cell 19 — Does the active site survive? (the missing objective)
+
+Everything so far asks whether a variant folds and whether it survives heat.
+Nothing asks whether it can still **do chemistry**. That gap is why Cell 18 is
+hard to interpret: the greedy baseline wins on both objectives, but it stacks
+nine aggressive mutations including N233, right next to the catalytic His237.
+
+Either the search is useless, or the objectives are incomplete. Only a look at
+the active site separates those.
+
+IsPETase cuts PET with a serine triad: **Ser160** attacks, **His237**
+deprotonates, **Asp206** holds His237 in place. None of the three is ever
+mutated — they are frozen — but the other 262 positions can still pull them out
+of alignment. Two hydrogen bonds say whether that happened.
+
+**Read it as a filter, not a score.** It removes candidates that cannot work.
+It does not rank the survivors, and it still does not measure catalysis.
+"""),
+    code("""
+!pip install -q transformers accelerate
+
+from polyphage import StructurePredictor, triad_geometry, check_wildtype
+
+predictor = StructurePredictor()          # ~2.6 GB download, once
+
+# GATE: if ESMFold cannot reproduce a triad that a 0.92 A crystal resolves,
+# nothing it says about a variant means anything.
+wt_geom = triad_geometry(predictor.fold(target.wildtype_seq), target)
+assert check_wildtype(wt_geom), "predictor does not reproduce the wild-type triad"
+"""),
+    code("""
+from polyphage import greedy_ddg_variant, print_screen, screen
+
+baseline = greedy_ddg_variant(target, oracle, n_mutations=9)
+
+candidates = [("wild type", target.wildtype_seq), ("greedy baseline", baseline.sequence)]
+candidates += [(f"front {i+1} ({r.n_mutations} mut)", r.sequence)
+               for i, r in enumerate(reports)]
+
+results = screen(predictor, target, candidates)   # ~30-60 s each
+print_screen(results)
+"""),
+    md("""
+The line that matters: **does greedy break the triad where the front holds it?**
+
+If yes, the objectives were incomplete rather than the search wrong, and there
+is a fourth objective to add. If greedy survives too, the negative result in
+`results/baseline_comparison.md` stands and is stronger for having survived the
+obvious rescue. Report whichever happens.
+"""),
+    md("""
+## Cell 20 — Why does the search lose to a table lookup?
+
+Three hypotheses from `results/baseline_comparison.md`, one config change each.
+Cheap: no new code, just `run()` with different arguments.
+
+Run B is the interesting one. If the search *starting from* greedy improves on
+it, the honest claim becomes "a refiner, not a discoverer" — smaller than the
+original, and true.
+"""),
+    code("""
+import time
+from polyphage import compare_to_front, print_comparison, report_front, run
+
+trials = {
+    "A  six times the budget": dict(n_gen=150),
+    "B  seeded from greedy":   dict(n_gen=25, seed_seq=baseline.sequence),
+    "C  no novelty objective": dict(n_gen=25, objectives=objectives[:2]),
+}
+
+for label, kw in trials.items():
+    objs = kw.pop("objectives", objectives)
+    names = [o.name for o in objs]
+    t0 = time.time()
+    res = run(target, objs, pop_size=40, max_mutations=10, seed=1,
+              verbose=False, **kw)
+    front = report_front(target, res, names)
+    best_ddg = min((v.objectives.get("ddg", 0.0) for v in front), default=0.0)
+    print(f"{label:<26} {len(front):>3} variants  best ddg {best_ddg:+.3f}  "
+          f"{time.time() - t0:>5.0f}s")
+    print_comparison(compare_to_front(target, oracle, front, scorer=batch, n_mutations=9))
+    print()
+"""),
+    md("""
 ---
 
 ## What this does and does not show
