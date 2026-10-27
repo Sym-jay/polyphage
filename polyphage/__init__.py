@@ -9,7 +9,19 @@ from .encoding import (
     hamming,
     load_target,
     mutations,
+    vector_from_seq,
     wildtype_vector,
+)
+from .geometry import (
+    HBOND_MAX,
+    PLDDT_MIN,
+    ScreenResult,
+    StructurePredictor,
+    TriadGeometry,
+    check_wildtype,
+    print_screen,
+    screen,
+    triad_geometry,
 )
 from .baselines import (
     BaselineVariant,
@@ -54,7 +66,9 @@ from .validate import (
 
 __all__ = [
     "AA_ALPHABET", "CATALYTIC_TRIAD", "Target", "decode", "format_mutations",
-    "hamming", "load_target", "mutations", "wildtype_vector",
+    "hamming", "load_target", "mutations", "vector_from_seq", "wildtype_vector",
+    "HBOND_MAX", "PLDDT_MIN", "ScreenResult", "StructurePredictor",
+    "TriadGeometry", "check_wildtype", "print_screen", "screen", "triad_geometry",
     "BatchScorer", "SubprocessScorer", "check_equivalence",
     "ObjectiveSpec", "foldability_objective", "novelty_objective", "run",
     "StabilityOracle", "stability_objective",

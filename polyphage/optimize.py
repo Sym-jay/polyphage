@@ -31,7 +31,7 @@ from pymoo.core.sampling import Sampling
 from pymoo.operators.crossover.ux import UniformCrossover
 from pymoo.optimize import minimize
 
-from .encoding import decode, hamming, wildtype_vector
+from .encoding import decode, hamming, vector_from_seq, wildtype_vector
 
 N_AA = 20
 
@@ -61,16 +61,22 @@ def _rng(kwargs, fallback: np.random.Generator) -> np.random.Generator:
 class WildtypeBiasedSampling(Sampling):
     """Seed the population at wildtype, then perturb a handful of positions."""
 
-    def __init__(self, target, min_mut: int = 1, max_mut: int = 8, seed: int = 0):
+    def __init__(self, target, min_mut: int = 1, max_mut: int = 8, seed: int = 0,
+                 seed_vector: np.ndarray | None = None):
         super().__init__()
         self.target = target
         self.min_mut = min_mut
         self.max_mut = max_mut
         self._fallback = np.random.default_rng(seed)
+        # Start somewhere other than wildtype when given one. The greedy
+        # baseline beats the search outright; seeding from it asks whether the
+        # search can at least refine a good answer, which is a different and
+        # smaller claim than finding one.
+        self._seed_vector = None if seed_vector is None else np.asarray(seed_vector, dtype=int)
 
     def _do(self, problem, n_samples, **kwargs):
-        wt = wildtype_vector(self.target)
-        X = np.tile(wt, (n_samples, 1))
+        base = wildtype_vector(self.target) if self._seed_vector is None else self._seed_vector
+        X = np.tile(base, (n_samples, 1))
         rng = _rng(kwargs, self._fallback)
         for row in X:
             k = rng.integers(self.min_mut, self.max_mut + 1)
@@ -171,6 +177,7 @@ def run(
     mutation_prob: float | None = None,
     seed: int = 1,
     verbose: bool = True,
+    seed_seq: str | None = None,
 ):
     """Run NSGA-II. Returns the pymoo result object.
 
@@ -180,6 +187,10 @@ def run(
     ``seed`` fully determines the run: the same seed and config give the same
     front, and different seeds give independent replicates. Both properties are
     required to report a recovery rate, so do not treat seeds as cosmetic.
+
+    ``seed_seq`` starts the population from a given sequence instead of
+    wildtype. The catalytic triad must still match wildtype, since those
+    positions are frozen.
     """
     if mutation_prob is None:
         mutation_prob = 2.0 / target.n_mutable
@@ -188,7 +199,8 @@ def run(
     algorithm = NSGA2(
         pop_size=pop_size,
         sampling=WildtypeBiasedSampling(
-            target, max_mut=min(8, max_mutations), seed=seed
+            target, max_mut=min(8, max_mutations), seed=seed,
+            seed_vector=None if seed_seq is None else vector_from_seq(target, seed_seq),
         ),
         crossover=UniformCrossover(prob=0.9),
         mutation=RandomResetMutation(target, prob=mutation_prob, seed=seed),

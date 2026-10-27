@@ -130,7 +130,8 @@ validation, which *is* a defensible result, is in
 | Replication across seeds | **Done** — 20 seeds, see [`results/replication_20seeds.md`](results/replication_20seeds.md) |
 | ThermoMPNN ddG | **Working, verified end to end** (100% coverage, sign confirmed) |
 | ThermoMPNN zero-shot validation | **Done** — see [`results/thermompnn_validation.md`](results/thermompnn_validation.md) |
-| Activity / docking screen | Not started |
+| Catalytic geometry screen | Implemented, **never run** — the decisive one |
+| Docking screen | Not started, and deliberately deferred |
 | Wet-lab validation | Not started |
 
 Run the tests with `python -m pytest tests/ -q`. They need neither a GPU nor
@@ -161,6 +162,7 @@ polyphage/
   optimize.py    NSGA-II problem, categorical operators, objective specs
   validate.py    hotspot overlap, front reporting, run log, plotting
   baselines.py   the no-search control: greedy ddG stacking
+  geometry.py    does the catalytic triad survive? a filter, not a score
   control.py     randomization controls: uniform and ProteinMPNN-prior nulls
   replicate.py   recovery rate across seeds, with CIs and Holm correction
   stability.py   ThermoMPNN ddG via a cached site-saturation table
@@ -339,18 +341,24 @@ Stated plainly, because they bound what this project can claim:
 6. ~~The greedy-ddG baseline.~~ **Done, and it changed the conclusion** — it
    dominates all 16 front members on both objectives.
    See [`results/baseline_comparison.md`](results/baseline_comparison.md).
-7. **Work out why the search loses to a table lookup.** The live hypotheses are
-   a 1,000-evaluation budget over a 262-position space, operators too local to
-   reach a nine-position optimum from wild type, and a novelty objective that
-   buys front spread with mutations that do nothing. Each is testable; none has
-   been tried. This now matters more than another 30 seeds.
-8. **Extend to 50 seeds**, to tighten the 10% recovery rate's [3%, 30%]
+7. **Run the catalytic geometry screen** (`polyphage/geometry.py`, Cell 19).
+   The greedy stack includes N233, next to the catalytic His237, so it may be
+   winning by wrecking the one thing no objective measures. If geometry
+   separates greedy from the front, the objectives were incomplete rather than
+   the search wrong. Both outcomes are reportable; neither is known.
+8. **Work out why the search loses to a table lookup** (Cell 20). Three
+   hypotheses: a 1,000-evaluation budget over a 262-position space, operators
+   too local to reach a nine-position optimum from wild type, and a novelty
+   objective that buys front spread with mutations that do nothing. One config
+   change each.
+9. **Extend to 50 seeds**, to tighten the 10% recovery rate's [3%, 30%]
    interval. ~2 h on a T4; `retest` re-scores against every null for free.
-9. Activity screen on top candidates: ESMFold → triad geometry check → PET
-   oligomer docking (AutoDock Vina / GNINA), measuring Ser160 OG to ester
-   carbonyl distance. This is the part that speaks to actual plastic degradation.
-10. FastAPI + Docker serving layer, so other researchers can supply their own
-   constraints and get ranked sequences back.
+10. PET oligomer docking (AutoDock Vina / GNINA), measuring Ser160 OG to the
+    ester carbonyl. Deliberately deferred: docking scores predict binding, not
+    turnover, so this would be the weakest claim in any write-up. The geometry
+    screen above is the decisive, cheap part of the same question.
+11. FastAPI + Docker serving layer, so other researchers can supply their own
+    constraints and get ranked sequences back.
 
 ## How this was built
 
